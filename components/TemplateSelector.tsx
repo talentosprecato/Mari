@@ -16,6 +16,12 @@ const templates: Template[] = [
     longDescription: 'Ideal for tech, startups, and modern industries. Features a clean, single-column layout that emphasizes skills and recent achievements. Designed for readability on any device.'
   },
   {
+    id: 'two-column-professional',
+    name: 'Two-Column Pro',
+    description: 'A modern layout with a sidebar for key info.',
+    longDescription: 'A professional two-column layout that separates contact details and skills into a sidebar for quick scanning, while giving ample space for detailed experience and education history.'
+  },
+  {
     id: 'creative',
     name: 'Creative',
     description: 'A stylish layout for roles in design, marketing, etc.',

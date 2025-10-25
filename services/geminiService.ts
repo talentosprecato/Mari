@@ -15,6 +15,20 @@ const templatePrompts: Record<string, string> = {
 - **Layout:** Use a clean, professional, single-column layout.
 - **Summary:** Write a "Professional Summary" section.
 - **Style:** Emphasize skills and recent experience. Use horizontal rules sparingly to separate major sections. The overall tone should be contemporary and direct.`,
+  'two-column-professional': `
+- **Layout:** Use a two-column Markdown table for the main body of the CV.
+- **Structure:**
+    - The **left column** (wider) should contain: Experience, Education, Projects, Professional Narrative.
+    - The **right column** (narrower) should contain: Personal contact details (email, phone, address, links), Skills, Certifications.
+- **Header:** The Full Name should be a level 1 heading (#) at the very top, before the table structure, unless a photo is included (see photo instructions).
+- **Table Usage:** You MUST use a markdown table to create this layout. It's the only way the styling will work.
+- **Example:**
+    # Jane Doe
+    > A brief professional summary or the professional narrative here.
+    | | |
+    |---|---|
+    | ## Experience ... | ### Contact ... <br> ## Skills ... <br> ## Certifications ... |
+- **Style:** Professional and clean. Use headings within the table cells to delineate sections. The overall tone should be modern and efficient.`,
   creative: `
 - **Layout:** Get creative with Markdown. You could suggest a two-column feel by using tables or other structures if it looks clean.
 - **Summary:** Instead of a formal summary, create a short, engaging "About Me" section (2-3 sentences).
@@ -55,7 +69,7 @@ const languageConfig: Record<string, { name: string; narrativeHeading: string }>
 };
 
 
-const buildPrompt = (data: CVData, templateId: string, sectionOrder: SectionId[], language: string): string => {
+const buildPrompt = (data: CVData, templateId: string, sectionOrder: SectionId[], language: string, photoAlignment: string): string => {
   const templateInstructions = templatePrompts[templateId] || templatePrompts['modern'];
   
   const capitalizedSectionNames = sectionOrder.map(s => {
@@ -75,12 +89,34 @@ const buildPrompt = (data: CVData, templateId: string, sectionOrder: SectionId[]
   } else if (language === 'it-sic') {
       languageInstruction = `Generate the entire CV in the **Sicilian dialect of Italy**. While using the dialect, ensure the structure and headings are professional and understandable, perhaps using standard Italian for main headings if the dialect form is not common (e.g., "Esperienza"). All content must be in this dialect.`;
   }
+  
+  let photoInstruction = '';
+  if (data.personal.photo && photoAlignment !== 'none') {
+      const contactInfo = [data.personal.email, data.personal.phone, data.personal.address, data.personal.linkedin, data.personal.website].filter(Boolean).join(' <br> ');
+      const headerText = `# ${data.personal.fullName} <br> ${contactInfo}`;
+      const photoMarkdown = `![Profile Photo](${data.personal.photo})`;
+      
+      const table = photoAlignment === 'right' 
+        ? `| ${headerText} | ${photoMarkdown} |` 
+        : `| ${photoMarkdown} | ${headerText} |`;
+
+      photoInstruction = `
+**Photo Inclusion & Header:**
+- A user photo is provided. You MUST include it and the main header (Full Name, contact info) in a two-column markdown table at the very top of the document. This overrules any other header instruction.
+- **Use this exact Markdown structure for the header table**:
+| | |
+|---|---|
+${table}
+`;
+  }
+
 
   return `
 You are an expert career coach and professional resume writer. Your task is to transform the following JSON data into a compelling, professional, and well-formatted Curriculum Vitae (CV) in Markdown format.
 
 **Instructions:**
 1.  **Language**: ${languageInstruction}
+${photoInstruction}
 2.  **Generate sections in this specific order:** ${capitalizedSectionNames.join(', ')}. This is a critical instruction.
 3.  **Adhere to the selected template style:**
     ${templateInstructions}
@@ -88,7 +124,7 @@ You are an expert career coach and professional resume writer. Your task is to t
 5.  **Professional Narrative Section:** If the 'professionalNarrative' field exists and is not empty, create a section with the heading "## ${narrativeHeading}" and place the user's text below it.
 6.  **Video Presentation Section:** If the 'videoUrl' field exists and is not empty, simply add a section with the heading "## Video Presentation" and the text "A video introduction is available and has been attached to this application." Do not try to render the URL.
 7.  **General Formatting:** Use standard Markdown for the entire output.
-    *   Use a main heading (#) for the person's name.
+    *   Use a main heading (#) for the person's name (unless a photo is included, then follow the photo instructions).
     *   Use level two headings (##) for sections.
     *   Use bold for job titles and company names.
     *   Use italics for dates and locations.
@@ -103,9 +139,9 @@ ${JSON.stringify(data, null, 2)}
 };
 
 
-export const generateCV = async (data: CVData, templateId: string, sectionOrder: SectionId[], language: string): Promise<string> => {
+export const generateCV = async (data: CVData, templateId: string, sectionOrder: SectionId[], language: string, photoAlignment: string): Promise<string> => {
     try {
-        const prompt = buildPrompt(data, templateId, sectionOrder, language);
+        const prompt = buildPrompt(data, templateId, sectionOrder, language, photoAlignment);
         const response = await ai.models.generateContent({
             model: 'gemini-2.5-pro',
             contents: prompt,
@@ -175,6 +211,7 @@ const cvDataSchema = {
                 address: { type: Type.STRING },
                 linkedin: { type: Type.STRING },
                 website: { type: Type.STRING },
+                photo: { type: Type.STRING, description: 'A base64 encoded string of the user photo, if found.' },
             },
             required: ['fullName', 'email']
         },
@@ -287,7 +324,7 @@ export const parseAndEnhanceCVFromFile = async (file: File, language: string): P
 You are an expert CV parser and career coach. Your task is to analyze the following uploaded CV file, extract all relevant information, enhance it, and structure it into a valid JSON object in the specified language.
 
 **Instructions:**
-1.  **Parse Thoroughly:** Read the document and identify information for the following sections: Personal Details, Work Experience, Education, Skills, Projects, Certifications, a professional summary or narrative, and any links to video presentations.
+1.  **Parse Thoroughly:** Read the document and identify information for the following sections: Personal Details, Work Experience, Education, Skills, Projects, Certifications, a professional summary or narrative, and any links to video presentations. If a photo is present, you MUST ignore it; do not attempt to process or include it in the JSON.
 2.  **Enhance Content & Language:**
     *   For each work experience entry, rewrite the responsibilities into action-oriented bullet points (e.g., "Led a team..." instead of "Was responsible for leading...").
     *   If you find a summary, objective, or "About Me" section, place that content into the 'professionalNarrative' field.
@@ -295,7 +332,7 @@ You are an expert CV parser and career coach. Your task is to analyze the follow
     *   Ensure the tone is professional and confident.
     *   Standardize date formats to YYYY-MM where possible. Use "Present" for ongoing roles.
     *   ${languageInstructionForParse}
-3.  **Structure Output:** Format the extracted and enhanced data strictly according to the provided JSON schema. Do not include any extra fields or text outside of the JSON object. Fill in fields with empty strings if no information is found. For array fields like experience, projects, etc., return an empty array if none are found.
+3.  **Structure Output:** Format the extracted and enhanced data strictly according to the provided JSON schema. Do not include any extra fields or text outside of the JSON object. Fill in fields with empty strings if no information is found. For array fields like experience, projects, etc., return an empty array if none are found. The 'photo' field in personal details should always be an empty string.
 4.  **Handle Missing Data:** If a section (like a website or LinkedIn profile) is not present in the text, omit the field or leave it as an empty string.
 `;
 

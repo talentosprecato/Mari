@@ -1,12 +1,13 @@
 
 import React, { useRef, useState, useCallback } from 'react';
 import { CVData, PersonalDetails, Experience, Education, SectionId, Project, Certification } from '../types';
-import { PlusIcon, TrashIcon, SparklesIcon, DragHandleIcon, UploadIcon, FileIcon, XCircleIcon, RecordIcon, VideoPlusIcon } from './icons';
+import { PlusIcon, TrashIcon, SparklesIcon, DragHandleIcon, UploadIcon, FileIcon, XCircleIcon, RecordIcon, VideoPlusIcon, CameraIcon } from './icons';
 import { VideoRecorderModal } from './VideoRecorderModal';
 
 interface CVFormProps {
   cvData: CVData;
-  onPersonalChange: (field: keyof PersonalDetails, value: string) => void;
+  onPersonalChange: (field: keyof Omit<PersonalDetails, 'photo'>, value: string) => void;
+  onPhotoChange: (base64: string) => void;
   onAddExperience: () => void;
   onUpdateExperience: (id: string, field: keyof Omit<Experience, 'id'>, value: string) => void;
   onRemoveExperience: (id: string) => void;
@@ -67,6 +68,7 @@ const Textarea: React.FC<React.TextareaHTMLAttributes<HTMLTextAreaElement> & { l
 export const CVForm: React.FC<CVFormProps> = ({
   cvData,
   onPersonalChange,
+  onPhotoChange,
   onAddExperience,
   onUpdateExperience,
   onRemoveExperience,
@@ -111,6 +113,7 @@ export const CVForm: React.FC<CVFormProps> = ({
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const videoInputRef = useRef<HTMLInputElement>(null);
+  const photoInputRef = useRef<HTMLInputElement>(null);
 
   const [isVideoRecorderOpen, setIsVideoRecorderOpen] = useState(false);
   const [videoError, setVideoError] = useState<string | null>(null);
@@ -218,16 +221,54 @@ export const CVForm: React.FC<CVFormProps> = ({
     setIsVideoRecorderOpen(false);
   };
 
+  const handlePhotoUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onloadend = () => {
+        onPhotoChange(reader.result as string);
+    };
+    reader.readAsDataURL(file);
+    event.target.value = ''; // Reset input
+  };
+
   const sectionComponents: Record<SectionId, React.ReactNode> = {
     personal: (
       <Section title="Personal Details">
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <Input label="Full Name" value={cvData.personal.fullName} onChange={(e) => onPersonalChange('fullName', e.target.value)} />
-          <Input label="Email" type="email" value={cvData.personal.email} onChange={(e) => onPersonalChange('email', e.target.value)} />
-          <Input label="Phone" value={cvData.personal.phone} onChange={(e) => onPersonalChange('phone', e.target.value)} />
-          <Input label="Address" value={cvData.personal.address} onChange={(e) => onPersonalChange('address', e.target.value)} />
-          <Input label="LinkedIn Profile URL" value={cvData.personal.linkedin} onChange={(e) => onPersonalChange('linkedin', e.target.value)} />
-          <Input label="Website/Portfolio URL" value={cvData.personal.website} onChange={(e) => onPersonalChange('website', e.target.value)} />
+        <div className="flex flex-col-reverse sm:flex-row gap-6 items-start">
+            <div className="flex-grow grid grid-cols-1 md:grid-cols-2 gap-4">
+                <Input label="Full Name" value={cvData.personal.fullName} onChange={(e) => onPersonalChange('fullName', e.target.value)} />
+                <Input label="Email" type="email" value={cvData.personal.email} onChange={(e) => onPersonalChange('email', e.target.value)} />
+                <Input label="Phone" value={cvData.personal.phone} onChange={(e) => onPersonalChange('phone', e.target.value)} />
+                <Input label="Address" value={cvData.personal.address} onChange={(e) => onPersonalChange('address', e.target.value)} />
+                <Input label="LinkedIn Profile URL" value={cvData.personal.linkedin} onChange={(e) => onPersonalChange('linkedin', e.target.value)} />
+                <Input label="Website/Portfolio URL" value={cvData.personal.website} onChange={(e) => onPersonalChange('website', e.target.value)} />
+            </div>
+            <div className="flex-shrink-0 w-32 mx-auto sm:mx-0 space-y-2">
+                <input
+                    type="file"
+                    ref={photoInputRef}
+                    onChange={handlePhotoUpload}
+                    accept="image/png, image/jpeg"
+                    className="hidden"
+                />
+                <div className="w-32 h-32 rounded-full border-2 border-dashed flex items-center justify-center bg-gray-50 overflow-hidden text-gray-400">
+                    {cvData.personal.photo ? (
+                        <img src={cvData.personal.photo} alt="Profile" className="w-full h-full object-cover" />
+                    ) : (
+                        <div className='text-center'>
+                           <CameraIcon className="w-8 h-8 mx-auto" />
+                           <p className='text-xs mt-1'>Photo</p>
+                        </div>
+                    )}
+                </div>
+                 {cvData.personal.photo ? (
+                    <button onClick={() => onPhotoChange('')} className="w-full text-center text-sm font-medium text-red-600 hover:text-red-800 transition-colors">Remove</button>
+                ) : (
+                    <button onClick={() => photoInputRef.current?.click()} className="w-full text-center text-sm font-medium text-indigo-600 hover:text-indigo-800 transition-colors">Upload</button>
+                )}
+            </div>
         </div>
       </Section>
     ),

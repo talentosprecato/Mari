@@ -1,6 +1,7 @@
+
 import React, { useEffect, useState, useRef } from 'react';
 import { TemplateSelector } from './TemplateSelector';
-import { DownloadIcon, SparklesIcon } from './icons';
+import { DownloadIcon, SparklesIcon, DocxIcon } from './icons';
 
 // This is a global function from the 'marked' library loaded in index.html
 declare global {
@@ -10,6 +11,7 @@ declare global {
         };
         jspdf: any;
         html2canvas: any;
+        htmlToDocx: any;
     }
 }
 
@@ -21,6 +23,40 @@ interface CVPreviewProps {
   onTemplateChange: (id: string) => void;
   onGenerate: () => void;
   videoUrl?: string;
+  photoAlignment: 'left' | 'right' | 'none';
+  onPhotoAlignmentChange: (alignment: 'left' | 'right' | 'none') => void;
+}
+
+const PhotoAlignmentSelector: React.FC<{
+    alignment: 'left' | 'right' | 'none';
+    onChange: (alignment: 'left' | 'right' | 'none') => void;
+}> = ({ alignment, onChange }) => {
+    const options = [
+        { id: 'left', label: 'Left' },
+        { id: 'right', label: 'Right' },
+        { id: 'none', label: 'None' },
+    ];
+    return (
+        <div className="mb-6">
+            <h3 className="text-lg font-semibold text-gray-800 mb-2">Photo Alignment</h3>
+            <div className="flex space-x-2 rounded-md bg-gray-100 p-1">
+                {options.map(option => (
+                    <button
+                        key={option.id}
+                        onClick={() => onChange(option.id as 'left' | 'right' | 'none')}
+                        className={`w-full rounded py-1.5 text-sm font-medium transition-colors ${
+                            alignment === option.id
+                                ? 'bg-white shadow-sm text-indigo-600'
+                                : 'text-gray-600 hover:bg-gray-200'
+                        }`}
+                        aria-pressed={alignment === option.id}
+                    >
+                        {option.label}
+                    </button>
+                ))}
+            </div>
+        </div>
+    )
 }
 
 const CVPreviewStyles = () => (
@@ -46,7 +82,7 @@ const CVPreviewStyles = () => (
         }
 
         /* Template Specific Variables */
-        .template-modern {
+        .template-modern, .template-two-column-professional {
             --cv-primary-color: #4f46e5; /* indigo-600 */
             --cv-font-sans: 'Inter', sans-serif;
         }
@@ -200,6 +236,58 @@ const CVPreviewStyles = () => (
             background-color: #000;
             margin-top: 0.5em;
         }
+
+        /* Photo & Table Styles */
+        .cv-preview-content table {
+            border-spacing: 0;
+        }
+        .cv-preview-content table th, .cv-preview-content table td {
+            border: 1px solid var(--cv-border-color);
+            padding: 0.5em;
+        }
+        .cv-preview-content > table:first-of-type {
+            width: 100%;
+            border: none;
+            margin-bottom: 2em;
+        }
+        .cv-preview-content > table:first-of-type td {
+            border: none;
+            padding: 0;
+            vertical-align: middle;
+        }
+        .cv-preview-content > table:first-of-type img {
+            max-width: 120px;
+            max-height: 120px;
+            border-radius: 50%;
+            object-fit: cover;
+            display: block;
+            margin: auto;
+        }
+
+        .template-two-column-professional .cv-preview-content > table {
+            width: 100%;
+            border: none;
+            border-collapse: collapse;
+        }
+        .template-two-column-professional .cv-preview-content > table td {
+            border: none;
+            padding: 0 1em;
+            vertical-align: top;
+            display: table-cell;
+        }
+        .template-two-column-professional .cv-preview-content > table td:first-child {
+            width: 65%;
+            padding-left: 0;
+        }
+        .template-two-column-professional .cv-preview-content > table td:last-child {
+            width: 35%;
+            padding-right: 0;
+        }
+        .template-two-column-professional .cv-preview-content > table h2:first-child,
+        .template-two-column-professional .cv-preview-content > table h3:first-child {
+            margin-top: 0;
+        }
+
     `}</style>
 );
 
@@ -238,9 +326,9 @@ const Placeholder = () => (
 )
 
 
-export const CVPreview: React.FC<CVPreviewProps> = ({ markdownContent, isLoading, error, selectedTemplate, onTemplateChange, onGenerate, videoUrl }) => {
+export const CVPreview: React.FC<CVPreviewProps> = ({ markdownContent, isLoading, error, selectedTemplate, onTemplateChange, onGenerate, videoUrl, photoAlignment, onPhotoAlignmentChange }) => {
   const [htmlContent, setHtmlContent] = useState('');
-  const [isExporting, setIsExporting] = useState(false);
+  const [isExporting, setIsExporting] = useState<false | 'pdf' | 'docx'>(false);
   const previewRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -255,7 +343,7 @@ export const CVPreview: React.FC<CVPreviewProps> = ({ markdownContent, isLoading
   const handleExportPDF = async () => {
     if (!previewRef.current || !markdownContent) return;
 
-    setIsExporting(true);
+    setIsExporting('pdf');
     try {
         const { jsPDF } = window.jspdf;
         const canvas = await window.html2canvas(previewRef.current, {
@@ -295,6 +383,43 @@ export const CVPreview: React.FC<CVPreviewProps> = ({ markdownContent, isLoading
         setIsExporting(false);
     }
   };
+  
+    const handleExportDOCX = async () => {
+    if (!previewRef.current || !markdownContent) return;
+
+    setIsExporting('docx');
+    try {
+        // Clone the element to avoid modifying the original
+        const contentNode = previewRef.current.cloneNode(true) as HTMLElement;
+        
+        // Remove the video element as it's not supported well in DOCX
+        const videoSection = contentNode.querySelector('.video-presentation-section');
+        if (videoSection) {
+            videoSection.innerHTML = `<p><em>[A video presentation was included here.]</em></p>`;
+        }
+        
+        const fileBuffer = await window.htmlToDocx(contentNode.outerHTML, null, {
+            table: { row: { cantSplit: true } },
+            footer: true,
+            pageNumber: true,
+        });
+
+        const blob = new Blob([fileBuffer], { type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' });
+        
+        const link = document.createElement('a');
+        link.href = URL.createObjectURL(blob);
+        link.download = 'cv.docx';
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+
+    } catch (err) {
+        console.error("Failed to export DOCX", err);
+        alert("Sorry, there was an error exporting the DOCX. Please try again.");
+    } finally {
+        setIsExporting(false);
+    }
+  };
 
 
   const renderContent = () => {
@@ -303,16 +428,18 @@ export const CVPreview: React.FC<CVPreviewProps> = ({ markdownContent, isLoading
     if(!markdownContent && !isLoading) return <Placeholder />;
 
     return (
-        <div ref={previewRef} className="cv-preview-content">
-            {videoUrl && (
-                 <div className="video-presentation-section">
-                    <h2>Video Presentation</h2>
-                    <video key={videoUrl} controls src={videoUrl} />
-                </div>
-            )}
-            <div
-              dangerouslySetInnerHTML={{ __html: htmlContent }}
-            />
+        <div ref={previewRef} className="p-2">
+             <div className="cv-preview-content">
+                {videoUrl && (
+                     <div className="video-presentation-section">
+                        <h2>Video Presentation</h2>
+                        <video key={videoUrl} controls src={videoUrl} />
+                    </div>
+                )}
+                <div
+                  dangerouslySetInnerHTML={{ __html: htmlContent }}
+                />
+            </div>
         </div>
     )
   }
@@ -320,19 +447,26 @@ export const CVPreview: React.FC<CVPreviewProps> = ({ markdownContent, isLoading
   return (
     <div className="bg-white p-6 sm:p-8 rounded-lg shadow-md sticky top-24">
         <CVPreviewStyles />
-        <div className="flex justify-between items-center mb-6 border-b pb-3">
+        <div className="flex flex-wrap justify-between items-center mb-6 border-b pb-3 gap-4">
             <h2 className="text-2xl font-bold text-gray-900">CV Preview</h2>
-            <div className="flex items-center space-x-3">
+            <div className="flex items-center space-x-2">
+                <button
+                    onClick={handleExportDOCX}
+                    disabled={!markdownContent || isLoading || !!isExporting}
+                    className="flex items-center justify-center px-3 py-2 border border-gray-300 text-sm font-medium rounded-md shadow-sm text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 disabled:bg-gray-200 disabled:text-gray-500 disabled:cursor-not-allowed"
+                >
+                    {isExporting === 'docx' ? 'Exporting...' : <><DocxIcon className="w-5 h-5 mr-2" /> DOCX</>}
+                </button>
                 <button
                     onClick={handleExportPDF}
-                    disabled={!markdownContent || isLoading || isExporting}
-                    className="flex items-center justify-center px-4 py-2 border border-gray-300 text-sm font-medium rounded-md shadow-sm text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 disabled:bg-gray-200 disabled:text-gray-500 disabled:cursor-not-allowed"
+                    disabled={!markdownContent || isLoading || !!isExporting}
+                    className="flex items-center justify-center px-3 py-2 border border-gray-300 text-sm font-medium rounded-md shadow-sm text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 disabled:bg-gray-200 disabled:text-gray-500 disabled:cursor-not-allowed"
                 >
-                    {isExporting ? 'Exporting...' : <><DownloadIcon className="w-5 h-5 mr-2" /> Export PDF</>}
+                    {isExporting === 'pdf' ? 'Exporting...' : <><DownloadIcon className="w-5 h-5 mr-2" /> PDF</>}
                 </button>
                  <button
                     onClick={onGenerate}
-                    disabled={isLoading}
+                    disabled={isLoading || !!isExporting}
                     className="flex items-center justify-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 disabled:bg-indigo-300 disabled:cursor-not-allowed"
                 >
                     {isLoading ? (
@@ -353,13 +487,19 @@ export const CVPreview: React.FC<CVPreviewProps> = ({ markdownContent, isLoading
             </div>
         </div>
         
-        <TemplateSelector 
-            selectedTemplate={selectedTemplate}
-            onTemplateChange={onTemplateChange}
-        />
+        <div className='grid grid-cols-1 md:grid-cols-2 gap-x-8'>
+            <TemplateSelector 
+                selectedTemplate={selectedTemplate}
+                onTemplateChange={onTemplateChange}
+            />
+             <PhotoAlignmentSelector
+                alignment={photoAlignment}
+                onChange={onPhotoAlignmentChange}
+            />
+        </div>
         
         <div className={`template-${selectedTemplate}`}>
-            <div className="min-h-[600px] border-t pt-6 mt-6">
+            <div className="min-h-[600px] border rounded-lg p-4 bg-gray-50 shadow-inner">
                 {renderContent()}
             </div>
         </div>

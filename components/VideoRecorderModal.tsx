@@ -1,4 +1,3 @@
-
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { CVData } from '../types';
 import { generateVideoScript } from '../services/geminiService';
@@ -36,6 +35,11 @@ export const VideoRecorderModal: React.FC<VideoRecorderModalProps> = ({ isOpen, 
   const chunksRef = useRef<Blob[]>([]);
   const countdownIntervalRef = useRef<number | null>(null);
   const animationFrameIdRef = useRef<number | null>(null);
+  const selectedFilterRef = useRef(selectedFilter);
+
+  useEffect(() => {
+    selectedFilterRef.current = selectedFilter;
+  }, [selectedFilter]);
 
   const drawVideoOnCanvas = useCallback(() => {
     if (videoRef.current && canvasRef.current && videoRef.current.readyState >= 3) {
@@ -45,12 +49,12 @@ export const VideoRecorderModal: React.FC<VideoRecorderModalProps> = ({ isOpen, 
       if (ctx) {
         canvas.width = video.videoWidth;
         canvas.height = video.videoHeight;
-        ctx.filter = selectedFilter;
+        ctx.filter = selectedFilterRef.current;
         ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
       }
     }
     animationFrameIdRef.current = requestAnimationFrame(drawVideoOnCanvas);
-  }, [selectedFilter]);
+  }, []);
 
   const startCamera = useCallback(async () => {
     try {
@@ -59,7 +63,10 @@ export const VideoRecorderModal: React.FC<VideoRecorderModalProps> = ({ isOpen, 
       if (videoRef.current) {
         videoRef.current.srcObject = mediaStream;
         videoRef.current.onloadedmetadata = () => {
-             animationFrameIdRef.current = requestAnimationFrame(drawVideoOnCanvas);
+            if (animationFrameIdRef.current) {
+                cancelAnimationFrame(animationFrameIdRef.current);
+            }
+            animationFrameIdRef.current = requestAnimationFrame(drawVideoOnCanvas);
         };
       }
     } catch (error) {
@@ -76,6 +83,7 @@ export const VideoRecorderModal: React.FC<VideoRecorderModalProps> = ({ isOpen, 
     }
     if (animationFrameIdRef.current) {
       cancelAnimationFrame(animationFrameIdRef.current);
+      animationFrameIdRef.current = null;
     }
   }, [stream]);
 

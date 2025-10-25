@@ -50,6 +50,7 @@ const App: React.FC = () => {
     saveStatus,
     loadCVData, 
     updatePersonal, 
+    updatePhoto,
     addExperience, 
     updateExperience, 
     removeExperience, 
@@ -74,6 +75,7 @@ const App: React.FC = () => {
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
   const [selectedTemplate, setSelectedTemplate] = useState<string>('modern');
+  const [photoAlignment, setPhotoAlignment] = useState<'left' | 'right' | 'none'>('right');
   const [sections, setSections] = useState<SectionId[]>(['personal', 'experience', 'education', 'skills', 'projects', 'certifications', 'video', 'professionalNarrative']);
   const [language, setLanguage] = useState('en');
   
@@ -87,7 +89,7 @@ const App: React.FC = () => {
     setIsLoading(true);
     setError(null);
     try {
-      const markdown = await generateCV(cvData as CVData, selectedTemplate, sections, language);
+      const markdown = await generateCV(cvData as CVData, selectedTemplate, sections, language, photoAlignment);
       setGeneratedMd(markdown);
     } catch (e) {
       setError('Failed to generate CV. Please check your API key and try again.');
@@ -95,7 +97,7 @@ const App: React.FC = () => {
     } finally {
       setIsLoading(false);
     }
-  }, [cvData, selectedTemplate, sections, language]);
+  }, [cvData, selectedTemplate, sections, language, photoAlignment]);
   
   const handleEnhanceCV = useCallback(async (file: File) => {
     setIsEnhancing(true);
@@ -105,6 +107,7 @@ const App: React.FC = () => {
         const result = await parseAndEnhanceCVFromFile(file, language);
         const processedData: CVData = {
             ...result,
+            personal: { ...result.personal, photo: result.personal.photo || '' },
             experience: result.experience.map(exp => ({ ...exp, id: crypto.randomUUID() })),
             education: result.education.map(edu => ({ ...edu, id: crypto.randomUUID() })),
             projects: result.projects.map(proj => ({...proj, id: crypto.randomUUID()})),
@@ -113,7 +116,7 @@ const App: React.FC = () => {
         };
         setPendingEnhancedData(processedData);
 
-        const markdownPreview = await generateCV(processedData, 'modern', ['personal', 'experience', 'education', 'skills', 'projects', 'certifications', 'video', 'professionalNarrative'], language);
+        const markdownPreview = await generateCV(processedData, 'modern', ['personal', 'experience', 'education', 'skills', 'projects', 'certifications', 'video', 'professionalNarrative'], language, 'right');
         setEnhancedPreviewMd(markdownPreview);
         setShowEnhancePreviewModal(true);
 
@@ -165,6 +168,7 @@ const App: React.FC = () => {
         <CVForm
           cvData={cvData}
           onPersonalChange={updatePersonal}
+          onPhotoChange={updatePhoto}
           onAddExperience={addExperience}
           onUpdateExperience={updateExperience}
           onRemoveExperience={removeExperience}
@@ -198,6 +202,8 @@ const App: React.FC = () => {
           onTemplateChange={setSelectedTemplate}
           onGenerate={handleGenerateCV}
           videoUrl={cvData.videoUrl}
+          photoAlignment={photoAlignment}
+          onPhotoAlignmentChange={setPhotoAlignment}
         />
       </main>
 

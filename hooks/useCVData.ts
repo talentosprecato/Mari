@@ -10,6 +10,7 @@ const initialCVData: CVData = {
     address: '123 Main St, Anytown, USA',
     linkedin: 'linkedin.com/in/janedoe',
     website: 'janedoe.com',
+    photo: '',
   },
   experience: [
     {
@@ -113,8 +114,12 @@ export const useCVData = () => {
     setCvData(newData);
   };
 
-  const updatePersonal = (field: keyof PersonalDetails, value: string) => {
+  const updatePersonal = (field: keyof Omit<PersonalDetails, 'photo'>, value: string) => {
     setCvData(prev => ({ ...prev, personal: { ...prev.personal, [field]: value } }));
+  };
+
+  const updatePhoto = (base64: string) => {
+    setCvData(prev => ({ ...prev, personal: { ...prev.personal, photo: base64 } }));
   };
 
   const addExperience = () => {
@@ -283,6 +288,7 @@ export const useCVData = () => {
     saveStatus,
     loadCVData,
     updatePersonal,
+    updatePhoto,
     addExperience,
     updateExperience,
     removeExperience,
