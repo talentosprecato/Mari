@@ -2,7 +2,9 @@ import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { CVData } from '../types';
 import { generateVideoScript, startLiveTranscriptionSession } from '../services/geminiService';
 import { MagicWandIcon } from './icons';
-import type { LiveServerMessage, Blob as GenAI_Blob, ClientConnection } from '@google/genai';
+// FIX: The ClientConnection type is not exported from @google/genai.
+// The type is removed from the import.
+import type { LiveServerMessage, Blob as GenAI_Blob } from '@google/genai';
 
 interface VideoRecorderModalProps {
   isOpen: boolean;
@@ -90,7 +92,12 @@ export const VideoRecorderModal: React.FC<VideoRecorderModalProps> = ({ isOpen, 
   
   const selectedFilterRef = useRef(selectedFilter);
   const subtitlesRef = useRef(subtitles);
-  const sessionPromiseRef = useRef<Promise<ClientConnection> | null>(null);
+  // FIX: ClientConnection is not an exported type from @google/genai.
+  // Using an inline type for the session object based on its usage in the app.
+  const sessionPromiseRef = useRef<Promise<{
+    sendRealtimeInput: (input: { media: GenAI_Blob; }) => void;
+    close: () => void;
+  }> | null>(null);
   const audioContextRef = useRef<AudioContext | null>(null);
   const scriptProcessorRef = useRef<ScriptProcessorNode | null>(null);
   const subtitleTimeoutRef = useRef<number | null>(null);

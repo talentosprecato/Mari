@@ -1,4 +1,3 @@
-
 import { GoogleGenAI, Type, LiveServerMessage, Modality } from "@google/genai";
 import { CVData, CVDataFromAI, SectionId, JobSuggestion } from "../types";
 
@@ -125,6 +124,15 @@ ${table}
 `;
   }
 
+  // Create a copy of the data without the photo to avoid exceeding token limits in the JSON part of the prompt.
+  const dataForPrompt = {
+    ...data,
+    personal: {
+      ...data.personal,
+      photo: data.personal.photo ? 'USER_PHOTO_PROVIDED' : '',
+    },
+  };
+
 
   return `
 You are an expert career coach and professional resume writer. Your task is to transform the following JSON data into a compelling, professional, and well-formatted Curriculum Vitae (CV) in Markdown format.
@@ -148,7 +156,7 @@ ${photoInstruction}
 
 **User Data:**
 \`\`\`json
-${JSON.stringify(data, null, 2)}
+${JSON.stringify(dataForPrompt, null, 2)}
 \`\`\`
   `;
 };
@@ -156,14 +164,35 @@ ${JSON.stringify(data, null, 2)}
 
 export const generateCV = async (data: CVData, templateId: string, sectionOrder: SectionId[], language: string, photoAlignment: string): Promise<string> => {
     try {
-        const prompt = buildPrompt(data, templateId, sectionOrder, language, photoAlignment);
+        const PHOTO_PLACEHOLDER = '--CV-PHOTO-PLACEHOLDER--';
+        const originalPhoto = data.personal.photo;
+        let dataForPrompt = data;
+
+        // If a photo exists, replace it with a placeholder for the prompt generation
+        // to avoid sending the large base64 string to the model.
+        if (originalPhoto) {
+            dataForPrompt = {
+                ...data,
+                personal: {
+                    ...data.personal,
+                    photo: PHOTO_PLACEHOLDER,
+                },
+            };
+        }
+
+        const prompt = buildPrompt(dataForPrompt, templateId, sectionOrder, language, photoAlignment);
         const response = await ai.models.generateContent({
             model: 'gemini-2.5-pro',
             contents: prompt,
         });
         
-        const text = response.text;
+        let text = response.text;
         if (text) {
+             // After getting the response, replace the placeholder with the original photo data.
+            if (originalPhoto) {
+                // Use a regular expression with the 'g' flag to replace all occurrences.
+                text = text.replace(new RegExp(PHOTO_PLACEHOLDER, 'g'), originalPhoto);
+            }
             return text;
         } else {
             throw new Error("Received an empty response from the API.");
@@ -177,6 +206,15 @@ export const generateCV = async (data: CVData, templateId: string, sectionOrder:
 export const generateVideoScript = async (data: CVData, language: string): Promise<string> => {
     const langConfig = languageConfig[language] || languageConfig['en'];
     const languageName = langConfig.name;
+
+    // Exclude the photo from the data sent to the model to reduce token count.
+    const { photo, ...personalDetailsWithoutPhoto } = data.personal;
+    const dataForPrompt = {
+        personal: personalDetailsWithoutPhoto,
+        experience: data.experience,
+        projects: data.projects,
+        professionalNarrative: data.professionalNarrative
+    };
 
     const prompt = `
 You are an expert career coach. Your task is to write a short, compelling, and professional video script for a user based on their CV data.
@@ -193,7 +231,7 @@ You are an expert career coach. Your task is to write a short, compelling, and p
 
 **User CV Data:**
 \`\`\`json
-${JSON.stringify({ personal: data.personal, experience: data.experience, projects: data.projects, professionalNarrative: data.professionalNarrative }, null, 2)}
+${JSON.stringify(dataForPrompt, null, 2)}
 \`\`\`
 `;
     try {
@@ -411,6 +449,15 @@ export const findJobOpportunities = async (cvData: CVData, cities: string, langu
     const langConfig = languageConfig[language] || languageConfig['en'];
     const languageName = langConfig.name;
 
+    // Exclude the photo from the data sent to the model to reduce token count.
+    const { photo, ...personalDetailsWithoutPhoto } = cvData.personal;
+    const dataForPrompt = {
+        personal: personalDetailsWithoutPhoto,
+        experience: cvData.experience,
+        skills: cvData.skills,
+        projects: cvData.projects
+    };
+
     const prompt = `
 You are an expert career advisor and job search assistant.
 Based on the following CV data, suggest 3 relevant job titles in ${languageName}.
@@ -422,7 +469,7 @@ Do not include any text before or after the JSON array. Do not use markdown back
 
 **CV Data:**
 \`\`\`json
-${JSON.stringify({personal: cvData.personal, experience: cvData.experience, skills: cvData.skills, projects: cvData.projects }, null, 2)}
+${JSON.stringify(dataForPrompt, null, 2)}
 \`\`\`
 `;
     try {
@@ -452,6 +499,16 @@ export const draftCoverLetter = async (cvData: CVData, jobTitle: string, company
     const langConfig = languageConfig[language] || languageConfig['en'];
     const languageName = langConfig.name;
     
+    // Exclude the photo from the data sent to the model to reduce token count.
+    const { photo, ...personalDetailsWithoutPhoto } = cvData.personal;
+    const dataForPrompt = {
+        personal: personalDetailsWithoutPhoto,
+        experience: cvData.experience,
+        skills: cvData.skills,
+        projects: cvData.projects,
+        professionalNarrative: cvData.professionalNarrative
+    };
+    
     const prompt = `
 You are a professional career coach specializing in writing compelling cover letters.
 Your task is to write a concise and professional cover letter for the role of "${jobTitle}" at "${companyName}".
@@ -465,7 +522,7 @@ The letter must be written in **${languageName}**.
 
 **Applicant's CV Data:**
 \`\`\`json
-${JSON.stringify({ personal: cvData.personal, experience: cvData.experience, skills: cvData.skills, projects: cvData.projects, professionalNarrative: cvData.professionalNarrative }, null, 2)}
+${JSON.stringify(dataForPrompt, null, 2)}
 \`\`\`
 `;
     try {
