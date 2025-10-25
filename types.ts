@@ -12,6 +12,7 @@ export interface Experience {
   id: string;
   jobTitle: string;
   company: string;
+
   location: string;
   startDate: string;
   endDate: string;
@@ -51,9 +52,10 @@ export interface CVData {
   projects: Project[];
   certifications: Certification[];
   professionalNarrative: string;
+  videoUrl: string;
 }
 
-export type SectionId = 'personal' | 'experience' | 'education' | 'skills' | 'projects' | 'certifications' | 'professionalNarrative';
+export type SectionId = 'personal' | 'experience' | 'education' | 'skills' | 'projects' | 'certifications' | 'video' | 'professionalNarrative';
 
 export type CVDataFromAI = Omit<CVData, 'experience' | 'education' | 'projects' | 'certifications'> & {
     experience: Omit<Experience, 'id'>[];

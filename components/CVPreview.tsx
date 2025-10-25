@@ -1,6 +1,7 @@
+
 import React, { useEffect, useState, useRef } from 'react';
 import { TemplateSelector } from './TemplateSelector';
-import { DownloadIcon } from './icons';
+import { DownloadIcon, SparklesIcon } from './icons';
 
 // This is a global function from the 'marked' library loaded in index.html
 declare global {
@@ -19,6 +20,8 @@ interface CVPreviewProps {
   error: string | null;
   selectedTemplate: string;
   onTemplateChange: (id: string) => void;
+  onGenerate: () => void;
+  videoUrl?: string;
 }
 
 const LoadingSkeleton = () => (
@@ -56,7 +59,7 @@ const Placeholder = () => (
 )
 
 
-export const CVPreview: React.FC<CVPreviewProps> = ({ markdownContent, isLoading, error, selectedTemplate, onTemplateChange }) => {
+export const CVPreview: React.FC<CVPreviewProps> = ({ markdownContent, isLoading, error, selectedTemplate, onTemplateChange, onGenerate, videoUrl }) => {
   const [htmlContent, setHtmlContent] = useState('');
   const [isExporting, setIsExporting] = useState(false);
   const previewRef = useRef<HTMLDivElement>(null);
@@ -121,11 +124,18 @@ export const CVPreview: React.FC<CVPreviewProps> = ({ markdownContent, isLoading
     if(!markdownContent && !isLoading) return <Placeholder />;
 
     return (
-        <div
-          ref={previewRef}
-          className="prose prose-indigo max-w-none"
-          dangerouslySetInnerHTML={{ __html: htmlContent }}
-        />
+        <div ref={previewRef} className="space-y-4">
+            {videoUrl && (
+                 <div className="not-prose">
+                    <h2 className="text-2xl font-bold text-gray-800 border-b pb-2 mb-4">Video Presentation</h2>
+                    <video key={videoUrl} controls src={videoUrl} className="w-full rounded-lg shadow-md bg-black" />
+                </div>
+            )}
+            <div
+              className="prose prose-indigo max-w-none"
+              dangerouslySetInnerHTML={{ __html: htmlContent }}
+            />
+        </div>
     )
   }
 
@@ -133,13 +143,35 @@ export const CVPreview: React.FC<CVPreviewProps> = ({ markdownContent, isLoading
     <div className="bg-white p-6 sm:p-8 rounded-lg shadow-md sticky top-24">
         <div className="flex justify-between items-center mb-6 border-b pb-3">
             <h2 className="text-2xl font-bold text-gray-900">CV Preview</h2>
-            <button
-                onClick={handleExportPDF}
-                disabled={!markdownContent || isLoading || isExporting}
-                className="flex items-center justify-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 disabled:bg-gray-400 disabled:cursor-not-allowed"
-            >
-                {isExporting ? 'Exporting...' : <><DownloadIcon className="w-5 h-5 mr-2" /> Export PDF</>}
-            </button>
+            <div className="flex items-center space-x-3">
+                <button
+                    onClick={handleExportPDF}
+                    disabled={!markdownContent || isLoading || isExporting}
+                    className="flex items-center justify-center px-4 py-2 border border-gray-300 text-sm font-medium rounded-md shadow-sm text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 disabled:bg-gray-200 disabled:text-gray-500 disabled:cursor-not-allowed"
+                >
+                    {isExporting ? 'Exporting...' : <><DownloadIcon className="w-5 h-5 mr-2" /> Export PDF</>}
+                </button>
+                 <button
+                    onClick={onGenerate}
+                    disabled={isLoading}
+                    className="flex items-center justify-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 disabled:bg-indigo-300 disabled:cursor-not-allowed"
+                >
+                    {isLoading ? (
+                        <>
+                            <svg className="animate-spin -ml-1 mr-3 h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                            </svg>
+                            Generating...
+                        </>
+                    ) : (
+                        <>
+                            <SparklesIcon className="w-5 h-5 mr-2" />
+                            Generate
+                        </>
+                    )}
+                </button>
+            </div>
         </div>
         
         <TemplateSelector 

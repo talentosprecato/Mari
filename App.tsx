@@ -7,6 +7,7 @@ import { generateCV, parseAndEnhanceCVFromFile } from './services/geminiService'
 import { CVData, SectionId } from './types';
 import { GithubIcon, SparklesIcon, CheckCircleIcon, XCircleIcon } from './components/icons';
 import { EnhancePreviewModal } from './components/EnhancePreviewModal';
+import { LanguageSelector } from './components/LanguageSelector';
 
 const SaveStatusIndicator: React.FC<{ status: 'idle' | 'saving' | 'saved' | 'error' }> = ({ status }) => {
     const visible = status !== 'idle';
@@ -66,13 +67,15 @@ const App: React.FC = () => {
     updateCertification,
     removeCertification,
     reorderCertification,
-    updateProfessionalNarrative
+    updateProfessionalNarrative,
+    updateVideoUrl
   } = useCVData();
   const [generatedMd, setGeneratedMd] = useState<string>('');
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
   const [selectedTemplate, setSelectedTemplate] = useState<string>('modern');
-  const [sections, setSections] = useState<SectionId[]>(['personal', 'experience', 'education', 'skills', 'projects', 'certifications', 'professionalNarrative']);
+  const [sections, setSections] = useState<SectionId[]>(['personal', 'experience', 'education', 'skills', 'projects', 'certifications', 'video', 'professionalNarrative']);
+  const [language, setLanguage] = useState('en');
   
   const [isEnhancing, setIsEnhancing] = useState(false);
   const [showEnhancePreviewModal, setShowEnhancePreviewModal] = useState(false);
@@ -84,7 +87,7 @@ const App: React.FC = () => {
     setIsLoading(true);
     setError(null);
     try {
-      const markdown = await generateCV(cvData as CVData, selectedTemplate, sections);
+      const markdown = await generateCV(cvData as CVData, selectedTemplate, sections, language);
       setGeneratedMd(markdown);
     } catch (e) {
       setError('Failed to generate CV. Please check your API key and try again.');
@@ -92,24 +95,25 @@ const App: React.FC = () => {
     } finally {
       setIsLoading(false);
     }
-  }, [cvData, selectedTemplate, sections]);
+  }, [cvData, selectedTemplate, sections, language]);
   
   const handleEnhanceCV = useCallback(async (file: File) => {
     setIsEnhancing(true);
     setError(null);
     setEnhancedPreviewMd('');
     try {
-        const result = await parseAndEnhanceCVFromFile(file);
+        const result = await parseAndEnhanceCVFromFile(file, language);
         const processedData: CVData = {
             ...result,
             experience: result.experience.map(exp => ({ ...exp, id: crypto.randomUUID() })),
             education: result.education.map(edu => ({ ...edu, id: crypto.randomUUID() })),
             projects: result.projects.map(proj => ({...proj, id: crypto.randomUUID()})),
             certifications: result.certifications.map(cert => ({...cert, id: crypto.randomUUID()})),
+            videoUrl: result.videoUrl || '',
         };
         setPendingEnhancedData(processedData);
 
-        const markdownPreview = await generateCV(processedData, 'modern', ['personal', 'experience', 'education', 'skills', 'projects', 'certifications', 'professionalNarrative']);
+        const markdownPreview = await generateCV(processedData, 'modern', ['personal', 'experience', 'education', 'skills', 'projects', 'certifications', 'video', 'professionalNarrative'], language);
         setEnhancedPreviewMd(markdownPreview);
         setShowEnhancePreviewModal(true);
 
@@ -119,7 +123,7 @@ const App: React.FC = () => {
     } finally {
         setIsEnhancing(false);
     }
-  }, []);
+  }, [language]);
 
   const handleAcceptEnhancement = () => {
     if (pendingEnhancedData) {
@@ -147,9 +151,12 @@ const App: React.FC = () => {
                 <h1 className="text-2xl font-bold text-gray-900 tracking-tight">AI CV Editor</h1>
                 <SaveStatusIndicator status={saveStatus} />
             </div>
-            <a href="https://github.com/google/generative-ai-docs/tree/main/site/en/gemini-api/docs/applications/web" target="_blank" rel="noopener noreferrer" className="text-gray-500 hover:text-gray-900">
-                <GithubIcon className="w-7 h-7" />
-            </a>
+            <div className="flex items-center space-x-4">
+                <LanguageSelector selectedLanguage={language} onLanguageChange={setLanguage} />
+                <a href="https://github.com/google/generative-ai-docs/tree/main/site/en/gemini-api/docs/applications/web" target="_blank" rel="noopener noreferrer" className="text-gray-500 hover:text-gray-900">
+                    <GithubIcon className="w-7 h-7" />
+                </a>
+            </div>
           </div>
         </div>
       </header>
@@ -176,8 +183,7 @@ const App: React.FC = () => {
           onRemoveCertification={removeCertification}
           onReorderCertification={reorderCertification}
           onProfessionalNarrativeChange={updateProfessionalNarrative}
-          onGenerate={handleGenerateCV}
-          isLoading={isLoading}
+          onVideoUrlChange={updateVideoUrl}
           sections={sections}
           onSectionOrderChange={setSections}
           onEnhanceCV={handleEnhanceCV}
@@ -189,6 +195,8 @@ const App: React.FC = () => {
           error={error}
           selectedTemplate={selectedTemplate}
           onTemplateChange={setSelectedTemplate}
+          onGenerate={handleGenerateCV}
+          videoUrl={cvData.videoUrl}
         />
       </main>
 

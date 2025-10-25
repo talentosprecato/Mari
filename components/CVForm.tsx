@@ -1,7 +1,8 @@
 
 import React, { useRef, useState } from 'react';
 import { CVData, PersonalDetails, Experience, Education, SectionId, Project, Certification } from '../types';
-import { PlusIcon, TrashIcon, SparklesIcon, DragHandleIcon, UploadIcon, FileIcon, XCircleIcon } from './icons';
+import { PlusIcon, TrashIcon, SparklesIcon, DragHandleIcon, UploadIcon, FileIcon, XCircleIcon, RecordIcon, VideoPlusIcon } from './icons';
+import { VideoRecorderModal } from './VideoRecorderModal';
 
 interface CVFormProps {
   cvData: CVData;
@@ -24,8 +25,7 @@ interface CVFormProps {
   onRemoveCertification: (id: string) => void;
   onReorderCertification: (startIndex: number, endIndex: number) => void;
   onProfessionalNarrativeChange: (value: string) => void;
-  onGenerate: () => void;
-  isLoading: boolean;
+  onVideoUrlChange: (url: string) => void;
   sections: SectionId[];
   onSectionOrderChange: (sections: SectionId[]) => void;
   onEnhanceCV: (file: File) => void;
@@ -84,8 +84,7 @@ export const CVForm: React.FC<CVFormProps> = ({
   onRemoveCertification,
   onReorderCertification,
   onProfessionalNarrativeChange,
-  onGenerate,
-  isLoading,
+  onVideoUrlChange,
   sections,
   onSectionOrderChange,
   onEnhanceCV,
@@ -109,6 +108,11 @@ export const CVForm: React.FC<CVFormProps> = ({
 
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const videoInputRef = useRef<HTMLInputElement>(null);
+
+  const [isVideoRecorderOpen, setIsVideoRecorderOpen] = useState(false);
+  const [videoError, setVideoError] = useState<string | null>(null);
+
 
   const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     if (event.target.files && event.target.files.length > 0) {
@@ -177,6 +181,31 @@ export const CVForm: React.FC<CVFormProps> = ({
   const projDragHandlers = createDragHandlers(projDragItem, projDragOverItem, onReorderProject);
   const certDragHandlers = createDragHandlers(certDragItem, certDragOverItem, onReorderCertification);
 
+  const handleVideoUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    setVideoError(null);
+    const video = document.createElement('video');
+    video.preload = 'metadata';
+    video.onloadedmetadata = () => {
+        window.URL.revokeObjectURL(video.src);
+        if (video.duration > 40) {
+            setVideoError('Video must be 40 seconds or less.');
+        } else {
+            const videoUrl = URL.createObjectURL(file);
+            onVideoUrlChange(videoUrl);
+        }
+    };
+    video.src = URL.createObjectURL(file);
+    event.target.value = ''; // Reset file input
+  };
+
+  const handleSaveRecordedVideo = (videoBlob: Blob) => {
+    const videoUrl = URL.createObjectURL(videoBlob);
+    onVideoUrlChange(videoUrl);
+    setIsVideoRecorderOpen(false);
+  };
 
   const sectionComponents: Record<SectionId, React.ReactNode> = {
     personal: (
@@ -340,10 +369,50 @@ export const CVForm: React.FC<CVFormProps> = ({
           rows={6}
         />
       </Section>
+    ),
+    video: (
+        <Section title="Video Presentation">
+            <div className='space-y-4'>
+                <p className='text-sm text-gray-600 bg-gray-50 p-3 rounded-md border border-gray-200'>
+                    <strong>Prompt:</strong> Record a short, 40-second video to introduce yourself. Briefly cover your main expertise, one key achievement, and what you're passionate about professionally.
+                    <br />
+                    <strong className='text-indigo-600'>Creative Tip:</strong> For a unique touch, try using an app like Snapchat or Instagram to record with an avatar or filter, then upload the file!
+                </p>
+
+                {cvData.videoUrl ? (
+                    <div className='space-y-3'>
+                        <video key={cvData.videoUrl} controls src={cvData.videoUrl} className='w-full rounded-md shadow-inner bg-black'></video>
+                        <button onClick={() => onVideoUrlChange('')} className="w-full flex items-center justify-center py-2 px-4 border border-dashed border-gray-300 text-sm font-medium rounded-md text-red-600 bg-white hover:bg-red-50">
+                            <TrashIcon className="w-5 h-5 mr-2" /> Remove Video
+                        </button>
+                    </div>
+                ) : (
+                    <div>
+                         <input
+                            type="file"
+                            ref={videoInputRef}
+                            onChange={handleVideoUpload}
+                            accept="video/*"
+                            className="hidden"
+                        />
+                        <div className='flex space-x-4'>
+                             <button onClick={() => setIsVideoRecorderOpen(true)} className="w-full flex items-center justify-center py-2 px-4 border border-gray-300 text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50">
+                                <RecordIcon className="w-5 h-5 mr-2" /> Record Video
+                            </button>
+                             <button onClick={() => videoInputRef.current?.click()} className="w-full flex items-center justify-center py-2 px-4 border border-gray-300 text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50">
+                                <VideoPlusIcon className="w-5 h-5 mr-2" /> Upload Video
+                            </button>
+                        </div>
+                        {videoError && <p className="text-red-500 text-sm mt-2">{videoError}</p>}
+                    </div>
+                )}
+            </div>
+        </Section>
     )
   };
 
   return (
+    <>
     <div className="bg-white p-6 rounded-lg shadow-md sticky top-24">
       <div className="space-y-8">
         
@@ -421,29 +490,12 @@ export const CVForm: React.FC<CVFormProps> = ({
           </div>
         ))}
       </div>
-
-      <div className="pt-8">
-        <button
-          onClick={onGenerate}
-          disabled={isLoading}
-          className="w-full flex items-center justify-center px-6 py-3 border border-transparent text-base font-medium rounded-md shadow-sm text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 disabled:bg-indigo-300 disabled:cursor-not-allowed"
-        >
-          {isLoading ? (
-            <>
-              <svg className="animate-spin -ml-1 mr-3 h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-              </svg>
-              Generating...
-            </>
-          ) : (
-            <>
-              <SparklesIcon className="w-5 h-5 mr-2" />
-              Generate CV with AI
-            </>
-          )}
-        </button>
-      </div>
     </div>
+    <VideoRecorderModal 
+        isOpen={isVideoRecorderOpen} 
+        onClose={() => setIsVideoRecorderOpen(false)}
+        onSave={handleSaveRecordedVideo}
+    />
+    </>
   );
 };

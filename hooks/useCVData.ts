@@ -52,6 +52,7 @@ const initialCVData: CVData = {
     }
   ],
   professionalNarrative: 'I am a passionate developer driven by creating elegant and efficient solutions to complex problems. My journey through various projects has taught me the importance of collaboration, continuous learning, and user-centric design.',
+  videoUrl: '',
 };
 
 const LOCAL_STORAGE_KEY = 'ai-cv-editor-data';
@@ -273,6 +274,10 @@ export const useCVData = () => {
     setCvData(prev => ({ ...prev, professionalNarrative: value }));
   };
 
+  const updateVideoUrl = (url: string) => {
+    setCvData(prev => ({...prev, videoUrl: url}));
+  };
+
   return {
     cvData,
     saveStatus,
@@ -296,5 +301,6 @@ export const useCVData = () => {
     reorderCertification,
     updateSkills,
     updateProfessionalNarrative,
+    updateVideoUrl,
   };
 };
