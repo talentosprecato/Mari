@@ -1,4 +1,3 @@
-
 import React, { useEffect, useState, useRef } from 'react';
 import { TemplateSelector } from './TemplateSelector';
 import { DownloadIcon, SparklesIcon } from './icons';
@@ -23,6 +22,186 @@ interface CVPreviewProps {
   onGenerate: () => void;
   videoUrl?: string;
 }
+
+const CVPreviewStyles = () => (
+    <style>{`
+        :root {
+            /* Default Theme Variables */
+            --cv-bg-color: #fff;
+            --cv-text-color: #374151; /* gray-700 */
+            --cv-primary-color: #4f46e5; /* indigo-600 */
+            --cv-secondary-color: #4b5563; /* gray-600 */
+            --cv-link-color: #4f46e5;
+            --cv-border-color: #e5e7eb; /* gray-200 */
+            
+            --cv-font-sans: 'Inter', system-ui, sans-serif;
+            --cv-font-serif: 'Lora', Georgia, serif;
+            --cv-font-mono: 'Roboto Mono', monospace;
+
+            --cv-font-size: 16px;
+            --cv-line-height: 1.6;
+            --cv-heading-font-weight: 700;
+            --cv-heading-line-height: 1.2;
+            --cv-heading-letter-spacing: -0.025em;
+        }
+
+        /* Template Specific Variables */
+        .template-modern {
+            --cv-primary-color: #4f46e5; /* indigo-600 */
+            --cv-font-sans: 'Inter', sans-serif;
+        }
+        .template-creative {
+            --cv-primary-color: #db2777; /* pink-600 */
+            --cv-secondary-color: #16a34a; /* green-600 */
+            --cv-font-sans: 'Inter', sans-serif;
+            --cv-heading-letter-spacing: -0.01em;
+        }
+        .template-classic {
+            --cv-primary-color: #111827; /* gray-900 */
+            --cv-secondary-color: #374151;
+            --cv-font-sans: 'Lora', serif;
+            --cv-font-serif: 'Lora', serif;
+            --cv-line-height: 1.5;
+        }
+        .template-ai-content-editor {
+            --cv-primary-color: #0d9488; /* teal-600 */
+            --cv-font-sans: 'Inter', sans-serif;
+            --cv-font-mono: 'Roboto Mono', monospace;
+        }
+        .template-social-media-creative {
+            --cv-primary-color: #c026d3; /* fuchsia-600 */
+            --cv-secondary-color: #ea580c; /* orange-600 */
+            --cv-font-sans: 'Inter', sans-serif;
+            --cv-heading-font-weight: 800;
+        }
+        .template-technical {
+            --cv-primary-color: #2563eb; /* blue-600 */
+            --cv-font-sans: 'Inter', sans-serif;
+            --cv-font-mono: 'Roboto Mono', monospace;
+            --cv-font-size: 15px;
+        }
+        .template-minimalist {
+            --cv-primary-color: #1f2937; /* gray-800 */
+            --cv-secondary-color: #6b7280; /* gray-500 */
+            --cv-font-sans: 'Inter', sans-serif;
+            --cv-line-height: 1.7;
+        }
+
+        /* General CV element styling using variables */
+        .cv-preview-content {
+            background-color: var(--cv-bg-color);
+            color: var(--cv-text-color);
+            font-family: var(--cv-font-sans);
+            font-size: var(--cv-font-size);
+            line-height: var(--cv-line-height);
+        }
+
+        .cv-preview-content h1 {
+            color: var(--cv-primary-color);
+            font-family: var(--cv-font-sans);
+            font-weight: 800;
+            font-size: 2.25em;
+            margin-bottom: 0.25em;
+            line-height: var(--cv-heading-line-height);
+            letter-spacing: var(--cv-heading-letter-spacing);
+        }
+
+        .cv-preview-content h2 {
+            color: var(--cv-primary-color);
+            font-family: var(--cv-font-sans);
+            font-weight: var(--cv-heading-font-weight);
+            font-size: 1.5em;
+            margin-top: 1.5em;
+            margin-bottom: 0.75em;
+            padding-bottom: 0.25em;
+            border-bottom: 2px solid var(--cv-border-color);
+            line-height: var(--cv-heading-line-height);
+        }
+
+        .cv-preview-content h3 {
+            color: var(--cv-secondary-color);
+            font-family: var(--cv-font-sans);
+            font-weight: 600;
+            font-size: 1.2em;
+            margin-top: 1em;
+            margin-bottom: 0.5em;
+        }
+
+        .cv-preview-content p,
+        .cv-preview-content ul,
+        .cv-preview-content ol {
+            margin-bottom: 1em;
+        }
+
+        .cv-preview-content a {
+            color: var(--cv-link-color);
+            text-decoration: none;
+        }
+        .cv-preview-content a:hover {
+            text-decoration: underline;
+        }
+
+        .cv-preview-content strong {
+            font-weight: 600;
+            color: var(--cv-secondary-color);
+        }
+        .template-classic .cv-preview-content strong {
+            color: var(--cv-primary-color);
+        }
+
+        .cv-preview-content ul {
+            list-style-type: disc;
+            padding-left: 1.5em;
+        }
+        .cv-preview-content ul li::marker {
+            color: var(--cv-primary-color);
+        }
+
+        .cv-preview-content hr {
+            border-top: 1px solid var(--cv-border-color);
+            margin: 2em 0;
+        }
+
+        .cv-preview-content blockquote {
+            border-left: 4px solid var(--cv-primary-color);
+            padding-left: 1em;
+            margin-left: 0;
+            font-style: italic;
+            color: var(--cv-secondary-color);
+        }
+
+        .cv-preview-content code {
+            background-color: #f3f4f6; /* gray-100 */
+            padding: 0.2em 0.4em;
+            margin: 0;
+            font-size: 85%;
+            border-radius: 3px;
+            font-family: var(--cv-font-mono);
+        }
+        .template-ai-content-editor .cv-preview-content code,
+        .template-technical .cv-preview-content code {
+            background-color: #e5e7eb; /* gray-200 */
+            color: #1e293b; /* slate-800 */
+        }
+
+        .template-creative .cv-preview-content h2 {
+            border-image: linear-gradient(to right, var(--cv-primary-color), var(--cv-secondary-color)) 1;
+            border-width: 0 0 3px 0;
+            border-style: solid;
+        }
+        
+        .video-presentation-section {
+            margin-bottom: 1em;
+        }
+        .video-presentation-section video {
+            width: 100%;
+            border-radius: 0.5rem;
+            box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
+            background-color: #000;
+            margin-top: 0.5em;
+        }
+    `}</style>
+);
 
 const LoadingSkeleton = () => (
     <div className="animate-pulse space-y-6">
@@ -124,15 +303,14 @@ export const CVPreview: React.FC<CVPreviewProps> = ({ markdownContent, isLoading
     if(!markdownContent && !isLoading) return <Placeholder />;
 
     return (
-        <div ref={previewRef} className="space-y-4">
+        <div ref={previewRef} className="cv-preview-content">
             {videoUrl && (
-                 <div className="not-prose">
-                    <h2 className="text-2xl font-bold text-gray-800 border-b pb-2 mb-4">Video Presentation</h2>
-                    <video key={videoUrl} controls src={videoUrl} className="w-full rounded-lg shadow-md bg-black" />
+                 <div className="video-presentation-section">
+                    <h2>Video Presentation</h2>
+                    <video key={videoUrl} controls src={videoUrl} />
                 </div>
             )}
             <div
-              className="prose prose-indigo max-w-none"
               dangerouslySetInnerHTML={{ __html: htmlContent }}
             />
         </div>
@@ -141,6 +319,7 @@ export const CVPreview: React.FC<CVPreviewProps> = ({ markdownContent, isLoading
 
   return (
     <div className="bg-white p-6 sm:p-8 rounded-lg shadow-md sticky top-24">
+        <CVPreviewStyles />
         <div className="flex justify-between items-center mb-6 border-b pb-3">
             <h2 className="text-2xl font-bold text-gray-900">CV Preview</h2>
             <div className="flex items-center space-x-3">
@@ -178,9 +357,11 @@ export const CVPreview: React.FC<CVPreviewProps> = ({ markdownContent, isLoading
             selectedTemplate={selectedTemplate}
             onTemplateChange={onTemplateChange}
         />
-
-        <div className="min-h-[600px] border-t pt-6 mt-6">
-            {renderContent()}
+        
+        <div className={`template-${selectedTemplate}`}>
+            <div className="min-h-[600px] border-t pt-6 mt-6">
+                {renderContent()}
+            </div>
         </div>
     </div>
   );

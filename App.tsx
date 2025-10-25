@@ -188,6 +188,7 @@ const App: React.FC = () => {
           onSectionOrderChange={setSections}
           onEnhanceCV={handleEnhanceCV}
           isEnhancing={isEnhancing}
+          language={language}
         />
         <CVPreview 
           markdownContent={generatedMd} 

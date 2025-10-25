@@ -123,6 +123,46 @@ export const generateCV = async (data: CVData, templateId: string, sectionOrder:
     }
 };
 
+export const generateVideoScript = async (data: CVData, language: string): Promise<string> => {
+    const langConfig = languageConfig[language] || languageConfig['en'];
+    const languageName = langConfig.name;
+
+    const prompt = `
+You are an expert career coach. Your task is to write a short, compelling, and professional video script for a user based on their CV data.
+
+**Instructions:**
+1.  **Objective:** Create a script that is approximately 40 seconds long when spoken at a natural pace (around 100-120 words).
+2.  **Language:** Write the entire script in **${languageName}**.
+3.  **Structure:** The script should have three parts:
+    *   **Introduction:** A brief, engaging opening (e.g., "Hello, I'm [Full Name]...").
+    *   **Core Message:** Highlight their main area of expertise and mention one key achievement from their experience or projects that demonstrates their value. Use quantifiable results if available.
+    *   **Closing:** A short, forward-looking statement about what they are passionate about or what kind of role they are seeking.
+4.  **Tone:** The tone should be confident, authentic, and professional.
+5.  **Output:** Provide only the raw script text. Do not include any headings, introductory phrases like "Here's the script:", or markdown formatting. The output should be ready to be copy-pasted into a teleprompter.
+
+**User CV Data:**
+\`\`\`json
+${JSON.stringify({ personal: data.personal, experience: data.experience, projects: data.projects, professionalNarrative: data.professionalNarrative }, null, 2)}
+\`\`\`
+`;
+    try {
+        const response = await ai.models.generateContent({
+            model: 'gemini-2.5-pro',
+            contents: prompt,
+        });
+        
+        const text = response.text;
+        if (text) {
+            return text;
+        } else {
+            throw new Error("Received an empty script response from the API.");
+        }
+    } catch (error) {
+        console.error("Error generating video script with Gemini API:", error);
+        throw new Error("Failed to generate video script.");
+    }
+};
+
 const cvDataSchema = {
     type: Type.OBJECT,
     properties: {

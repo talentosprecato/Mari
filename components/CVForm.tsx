@@ -1,5 +1,5 @@
 
-import React, { useRef, useState } from 'react';
+import React, { useRef, useState, useCallback } from 'react';
 import { CVData, PersonalDetails, Experience, Education, SectionId, Project, Certification } from '../types';
 import { PlusIcon, TrashIcon, SparklesIcon, DragHandleIcon, UploadIcon, FileIcon, XCircleIcon, RecordIcon, VideoPlusIcon } from './icons';
 import { VideoRecorderModal } from './VideoRecorderModal';
@@ -30,6 +30,7 @@ interface CVFormProps {
   onSectionOrderChange: (sections: SectionId[]) => void;
   onEnhanceCV: (file: File) => void;
   isEnhancing: boolean;
+  language: string;
 }
 
 const Section: React.FC<{ title: string; children: React.ReactNode }> = ({ title, children }) => (
@@ -88,7 +89,8 @@ export const CVForm: React.FC<CVFormProps> = ({
   sections,
   onSectionOrderChange,
   onEnhanceCV,
-  isEnhancing
+  isEnhancing,
+  language,
 }) => {
   const sectionDragItem = useRef<number | null>(null);
   const sectionDragOverItem = useRef<number | null>(null);
@@ -181,13 +183,14 @@ export const CVForm: React.FC<CVFormProps> = ({
   const projDragHandlers = createDragHandlers(projDragItem, projDragOverItem, onReorderProject);
   const certDragHandlers = createDragHandlers(certDragItem, certDragOverItem, onReorderCertification);
 
-  const handleVideoUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
+  const handleVideoUpload = useCallback((event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (!file) return;
 
     setVideoError(null);
     const video = document.createElement('video');
     video.preload = 'metadata';
+    
     video.onloadedmetadata = () => {
         window.URL.revokeObjectURL(video.src);
         if (video.duration > 40) {
@@ -197,9 +200,17 @@ export const CVForm: React.FC<CVFormProps> = ({
             onVideoUrlChange(videoUrl);
         }
     };
+
+    video.onerror = () => {
+        setVideoError('Could not load video metadata. The file might be corrupted or in an unsupported format.');
+        if (video.src) {
+          window.URL.revokeObjectURL(video.src);
+        }
+    };
+    
     video.src = URL.createObjectURL(file);
     event.target.value = ''; // Reset file input
-  };
+  }, [onVideoUrlChange]);
 
   const handleSaveRecordedVideo = (videoBlob: Blob) => {
     const videoUrl = URL.createObjectURL(videoBlob);
@@ -374,9 +385,7 @@ export const CVForm: React.FC<CVFormProps> = ({
         <Section title="Video Presentation">
             <div className='space-y-4'>
                 <p className='text-sm text-gray-600 bg-gray-50 p-3 rounded-md border border-gray-200'>
-                    <strong>Prompt:</strong> Record a short, 40-second video to introduce yourself. Briefly cover your main expertise, one key achievement, and what you're passionate about professionally.
-                    <br />
-                    <strong className='text-indigo-600'>Creative Tip:</strong> For a unique touch, try using an app like Snapchat or Instagram to record with an avatar or filter, then upload the file!
+                    <strong>Your Video Intro (40s max):</strong> Introduce yourself by briefly covering your main expertise, a key achievement, and your professional passion. You can either record directly or upload an existing video.
                 </p>
 
                 {cvData.videoUrl ? (
@@ -387,7 +396,7 @@ export const CVForm: React.FC<CVFormProps> = ({
                         </button>
                     </div>
                 ) : (
-                    <div>
+                    <div className='text-center'>
                          <input
                             type="file"
                             ref={videoInputRef}
@@ -403,7 +412,11 @@ export const CVForm: React.FC<CVFormProps> = ({
                                 <VideoPlusIcon className="w-5 h-5 mr-2" /> Upload Video
                             </button>
                         </div>
-                        {videoError && <p className="text-red-500 text-sm mt-2">{videoError}</p>}
+                        {videoError ? (
+                           <p className="text-red-500 text-sm mt-2">{videoError}</p>
+                        ) : (
+                           <p className="text-xs text-gray-500 mt-2">Max 40 seconds.</p>
+                        )}
                     </div>
                 )}
             </div>
@@ -495,6 +508,8 @@ export const CVForm: React.FC<CVFormProps> = ({
         isOpen={isVideoRecorderOpen} 
         onClose={() => setIsVideoRecorderOpen(false)}
         onSave={handleSaveRecordedVideo}
+        cvData={cvData}
+        language={language}
     />
     </>
   );
