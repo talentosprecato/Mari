@@ -1,7 +1,8 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { CVData } from '../types';
-import { generateVideoScript } from '../services/geminiService';
+import { generateVideoScript, startLiveTranscriptionSession } from '../services/geminiService';
 import { MagicWandIcon } from './icons';
+import type { LiveServerMessage, Blob as GenAI_Blob, ClientConnection } from '@google/genai';
 
 interface VideoRecorderModalProps {
   isOpen: boolean;
@@ -11,23 +12,72 @@ interface VideoRecorderModalProps {
   language: string;
 }
 
-const filters = [
+// Helpers for audio processing
+function encode(bytes: Uint8Array) {
+  let binary = '';
+  const len = bytes.byteLength;
+  for (let i = 0; i < len; i++) {
+    binary += String.fromCharCode(bytes[i]);
+  }
+  return btoa(binary);
+}
+function createPcmBlob(data: Float32Array): GenAI_Blob {
+  const l = data.length;
+  const int16 = new Int16Array(l);
+  for (let i = 0; i < l; i++) {
+    int16[i] = data[i] * 32768;
+  }
+  return {
+    data: encode(new Uint8Array(int16.buffer)),
+    mimeType: 'audio/pcm;rate=16000',
+  };
+}
+
+
+const filterGroups = {
+  'Standard': [
     { id: 'none', name: 'None' },
     { id: 'grayscale(1)', name: 'Grayscale' },
     { id: 'sepia(1)', name: 'Sepia' },
-    { id: 'saturate(2)', name: 'Vibrant' },
-    { id: 'hue-rotate(180deg) contrast(1.2)', name: 'Invert' },
+  ],
+  'Beauty & Retouch': [
+    { id: 'contrast(1.05) saturate(1.1) brightness(1.05)', name: 'Beauty Lens' },
+    { id: 'blur(3px)', name: 'Soft Focus' },
+  ],
+  'Creative': [
+    { id: 'saturate(2) contrast(1.2)', name: 'Vibrant' },
+    { id: 'hue-rotate(180deg) contrast(1.2)', name: 'Neon Demon' },
+    { id: 'sepia(0.6) contrast(1.1) brightness(0.9) saturate(1.2)', name: 'Vintage' },
+  ],
+};
+
+const overlays = [
+    { id: 'none', name: 'None' },
+    { id: 'vignette', name: 'Vignette' },
+    { id: 'light-leak', name: 'Light Leak' },
+    { id: 'cinematic-bars', name: 'Cinematic' },
+];
+
+const scrollSpeeds = [
+    { label: 'Slow', speed: 0.75 },
+    { label: 'Normal', speed: 1 },
+    { label: 'Fast', speed: 1.25 },
 ];
 
 export const VideoRecorderModal: React.FC<VideoRecorderModalProps> = ({ isOpen, onClose, onSave, cvData, language }) => {
   const [isRecording, setIsRecording] = useState(false);
   const [stream, setStream] = useState<MediaStream | null>(null);
   const [recordedBlob, setRecordedBlob] = useState<Blob | null>(null);
-  const [countdown, setCountdown] = useState(40);
+  const [countdown, setCountdown] = useState(60);
   const [selectedFilter, setSelectedFilter] = useState('none');
+  const [selectedOverlay, setSelectedOverlay] = useState('none');
   const [script, setScript] = useState<string | null>(null);
   const [isGeneratingScript, setIsGeneratingScript] = useState(false);
-  const [isTeleprompterVisible, setIsTeleprompterVisible] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [scrollSpeed, setScrollSpeed] = useState(1);
+  const [activeTab, setActiveTab] = useState<'filters' | 'overlays'>('filters');
+  const [isSubtitlesEnabled, setIsSubtitlesEnabled] = useState(true);
+  const [subtitles, setSubtitles] = useState('');
   
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -35,11 +85,24 @@ export const VideoRecorderModal: React.FC<VideoRecorderModalProps> = ({ isOpen, 
   const chunksRef = useRef<Blob[]>([]);
   const countdownIntervalRef = useRef<number | null>(null);
   const animationFrameIdRef = useRef<number | null>(null);
+  const teleprompterRef = useRef<HTMLDivElement>(null);
+  const scrollAnimationRef = useRef<number | null>(null);
+  
   const selectedFilterRef = useRef(selectedFilter);
+  const subtitlesRef = useRef(subtitles);
+  const sessionPromiseRef = useRef<Promise<ClientConnection> | null>(null);
+  const audioContextRef = useRef<AudioContext | null>(null);
+  const scriptProcessorRef = useRef<ScriptProcessorNode | null>(null);
+  const subtitleTimeoutRef = useRef<number | null>(null);
+
 
   useEffect(() => {
     selectedFilterRef.current = selectedFilter;
   }, [selectedFilter]);
+  
+  useEffect(() => {
+    subtitlesRef.current = subtitles;
+  }, [subtitles]);
 
   const drawVideoOnCanvas = useCallback(() => {
     if (videoRef.current && canvasRef.current && videoRef.current.readyState >= 3) {
@@ -51,15 +114,75 @@ export const VideoRecorderModal: React.FC<VideoRecorderModalProps> = ({ isOpen, 
         canvas.height = video.videoHeight;
         ctx.filter = selectedFilterRef.current;
         ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+
+        // Draw subtitles
+        const currentSubtitles = subtitlesRef.current;
+        if (currentSubtitles) {
+            const fontSize = Math.max(16, Math.round(canvas.height / 28));
+            ctx.font = `bold ${fontSize}px "Inter", sans-serif`;
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'bottom';
+            const text = currentSubtitles;
+            const padding = fontSize / 2;
+            const textMetrics = ctx.measureText(text);
+            const x = canvas.width / 2;
+            const y = canvas.height - (fontSize / 1.5);
+
+            ctx.fillStyle = 'rgba(0, 0, 0, 0.6)';
+            const textWidth = textMetrics.actualBoundingBoxRight + textMetrics.actualBoundingBoxLeft;
+            ctx.fillRect(
+                x - textWidth / 2 - padding,
+                y - fontSize - padding,
+                textWidth + padding * 2,
+                fontSize + padding * 2
+            );
+
+            ctx.fillStyle = 'white';
+            ctx.fillText(text, x, y);
+        }
       }
     }
     animationFrameIdRef.current = requestAnimationFrame(drawVideoOnCanvas);
   }, []);
 
-  const startCamera = useCallback(async () => {
+  const stopScroll = useCallback(() => {
+    if (scrollAnimationRef.current) {
+      cancelAnimationFrame(scrollAnimationRef.current);
+      scrollAnimationRef.current = null;
+    }
+    if (teleprompterRef.current) {
+      teleprompterRef.current.scrollTop = 0; // Reset scroll
+    }
+  }, []);
+
+  const handleLiveMessage = (message: LiveServerMessage) => {
+    if (subtitleTimeoutRef.current) {
+        clearTimeout(subtitleTimeoutRef.current);
+    }
+    if (message.serverContent?.turnComplete) {
+        setSubtitles('');
+        return;
+    }
+    if (message.serverContent?.inputTranscription) {
+        const text = message.serverContent.inputTranscription.text;
+        setSubtitles(text);
+        subtitleTimeoutRef.current = window.setTimeout(() => {
+            setSubtitles('');
+        }, 3000);
+    }
+  };
+
+  const handleLiveError = (e: Event) => {
+     console.error('Live transcription error:', e);
+     setError("Live transcription failed. Subtitles will not be available.");
+  };
+
+  const startMedia = useCallback(async () => {
+    setError(null);
     try {
       const mediaStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
       setStream(mediaStream);
+
       if (videoRef.current) {
         videoRef.current.srcObject = mediaStream;
         videoRef.current.onloadedmetadata = () => {
@@ -69,18 +192,63 @@ export const VideoRecorderModal: React.FC<VideoRecorderModalProps> = ({ isOpen, 
             animationFrameIdRef.current = requestAnimationFrame(drawVideoOnCanvas);
         };
       }
-    } catch (error) {
-      console.error("Error accessing camera:", error);
-      alert("Could not access camera. Please ensure you have given permission.");
-      onClose();
-    }
-  }, [onClose, drawVideoOnCanvas]);
 
-  const stopCamera = useCallback(() => {
+       if (isSubtitlesEnabled) {
+          sessionPromiseRef.current = startLiveTranscriptionSession(handleLiveMessage, handleLiveError, language);
+          
+          audioContextRef.current = new (window.AudioContext || (window as any).webkitAudioContext)({ sampleRate: 16000 });
+          const source = audioContextRef.current.createMediaStreamSource(mediaStream);
+          scriptProcessorRef.current = audioContextRef.current.createScriptProcessor(4096, 1, 1);
+          
+          scriptProcessorRef.current.onaudioprocess = (audioProcessingEvent) => {
+              const inputData = audioProcessingEvent.inputBuffer.getChannelData(0);
+              const pcmBlob = createPcmBlob(inputData);
+              
+              if (sessionPromiseRef.current && mediaRecorderRef.current?.state === 'recording') {
+                  sessionPromiseRef.current.then((session) => {
+                      session.sendRealtimeInput({ media: pcmBlob });
+                  });
+              }
+          };
+
+          source.connect(scriptProcessorRef.current);
+          scriptProcessorRef.current.connect(audioContextRef.current.destination);
+      }
+    } catch (err) {
+      console.error("Error accessing camera and microphone:", err);
+      let message = "Could not access camera and microphone. Please ensure you have given permissions for both devices.";
+      if (err instanceof Error) {
+        if (err.name === 'NotAllowedError') {
+            message = "Camera and microphone access was denied. Please enable permissions in your browser settings and try again.";
+        } else if (err.name === 'NotFoundError') {
+            message = "No camera or microphone found. Please ensure they are connected and enabled.";
+        }
+      }
+      setError(message);
+    }
+  }, [isSubtitlesEnabled, language, drawVideoOnCanvas]);
+
+  const stopMedia = useCallback(() => {
     if (stream) {
       stream.getTracks().forEach(track => track.stop());
       setStream(null);
     }
+    if (sessionPromiseRef.current) {
+        sessionPromiseRef.current.then(session => session.close());
+        sessionPromiseRef.current = null;
+    }
+    if (scriptProcessorRef.current) {
+        scriptProcessorRef.current.disconnect();
+        scriptProcessorRef.current = null;
+    }
+    if (audioContextRef.current) {
+        audioContextRef.current.close();
+        audioContextRef.current = null;
+    }
+    if (subtitleTimeoutRef.current) {
+        clearTimeout(subtitleTimeoutRef.current);
+    }
+    setSubtitles('');
     if (animationFrameIdRef.current) {
       cancelAnimationFrame(animationFrameIdRef.current);
       animationFrameIdRef.current = null;
@@ -89,19 +257,56 @@ export const VideoRecorderModal: React.FC<VideoRecorderModalProps> = ({ isOpen, 
 
   useEffect(() => {
     if (isOpen) {
-      startCamera();
+      startMedia();
     } else {
-      stopCamera();
+      stopMedia();
       setIsRecording(false);
       setRecordedBlob(null);
       if (countdownIntervalRef.current) clearInterval(countdownIntervalRef.current);
-      setCountdown(40);
+      setCountdown(60);
       setScript(null);
-      setIsTeleprompterVisible(false);
       setSelectedFilter('none');
+      setSelectedOverlay('none');
+      setError(null);
+      stopScroll();
     }
-    return () => stopCamera();
-  }, [isOpen, startCamera, stopCamera]);
+    return () => {
+        stopMedia();
+        stopScroll();
+    };
+  }, [isOpen, startMedia, stopMedia, stopScroll]);
+
+  const startScroll = useCallback(() => {
+    if (script && teleprompterRef.current) {
+        const element = teleprompterRef.current;
+        requestAnimationFrame(() => {
+            const scrollHeight = element.scrollHeight;
+            const clientHeight = element.clientHeight;
+            const totalScrollDistance = scrollHeight - clientHeight;
+            
+            if (totalScrollDistance > 0) {
+                const baseDuration = 60000;
+                const duration = baseDuration / scrollSpeed;
+                let startTime: number | null = null;
+                
+                const animateScroll = (timestamp: number) => {
+                    if (!startTime) startTime = timestamp;
+                    const elapsedTime = timestamp - startTime;
+                    const progress = Math.min(elapsedTime / duration, 1);
+                    
+                    element.scrollTop = totalScrollDistance * progress;
+                    
+                    if (progress < 1) {
+                        scrollAnimationRef.current = requestAnimationFrame(animateScroll);
+                    } else {
+                        scrollAnimationRef.current = null;
+                    }
+                };
+                scrollAnimationRef.current = requestAnimationFrame(animateScroll);
+            }
+        });
+    }
+  }, [script, scrollSpeed]);
 
   const handleStartRecording = () => {
     if (!canvasRef.current || !stream) return;
@@ -126,8 +331,9 @@ export const VideoRecorderModal: React.FC<VideoRecorderModalProps> = ({ isOpen, 
     };
     mediaRecorderRef.current.start();
     setIsRecording(true);
+    startScroll();
 
-    setCountdown(40);
+    setCountdown(60);
     countdownIntervalRef.current = window.setInterval(() => {
         setCountdown(prev => prev - 1);
     }, 1000);
@@ -136,7 +342,7 @@ export const VideoRecorderModal: React.FC<VideoRecorderModalProps> = ({ isOpen, 
         if(mediaRecorderRef.current?.state === 'recording') {
             handleStopRecording();
         }
-    }, 40000);
+    }, 60000);
   };
 
   const handleStopRecording = () => {
@@ -144,12 +350,14 @@ export const VideoRecorderModal: React.FC<VideoRecorderModalProps> = ({ isOpen, 
       mediaRecorderRef.current.stop();
       setIsRecording(false);
       if (countdownIntervalRef.current) clearInterval(countdownIntervalRef.current);
+      stopScroll();
     }
   };
 
   const handleRetake = () => {
     setRecordedBlob(null);
-    setCountdown(40);
+    setCountdown(60);
+    stopScroll();
   };
   
   const handleSave = () => {
@@ -160,11 +368,9 @@ export const VideoRecorderModal: React.FC<VideoRecorderModalProps> = ({ isOpen, 
 
   const handleGenerateScript = async () => {
     setIsGeneratingScript(true);
-    setScript(null);
     try {
       const generatedScript = await generateVideoScript(cvData, language);
       setScript(generatedScript);
-      setIsTeleprompterVisible(true);
     } catch (e) {
       console.error(e);
       alert("Failed to generate script. Please try again.");
@@ -188,66 +394,166 @@ export const VideoRecorderModal: React.FC<VideoRecorderModalProps> = ({ isOpen, 
         </header>
         <main className="p-6">
             <div className="relative w-full aspect-video bg-black rounded-md overflow-hidden shadow-inner">
-                 <video ref={videoRef} autoPlay muted playsInline className="absolute w-full h-full object-cover opacity-0 pointer-events-none"></video>
-                 <canvas ref={canvasRef} className={`w-full h-full object-cover transition-opacity duration-300 ${recordedBlob ? 'opacity-0' : 'opacity-100'}`}></canvas>
-                 {recordedBlob && <video key={videoSrc} src={videoSrc} controls autoPlay playsInline className="w-full h-full object-cover"></video>}
-                 {isRecording && <div className="absolute top-4 right-4 text-white bg-red-600 rounded-full px-3 py-1 text-sm font-bold animate-pulse">REC</div>}
-                 {isRecording && <div className="absolute bottom-4 left-4 text-white bg-black/50 rounded-md px-2 py-1 text-sm">0:{String(countdown).padStart(2, '0')}</div>}
-                 {isTeleprompterVisible && (
-                    <div className="absolute inset-0 bg-black/60 p-6 flex flex-col items-center justify-start overflow-hidden">
-                        <div className="w-full h-full overflow-y-auto scrollbar-hide">
-                            <div className={`text-white text-xl font-semibold whitespace-pre-wrap text-center transition-transform duration-[40s] linear ${isRecording ? '-translate-y-full' : 'translate-y-0'}`}>
-                                {script}
-                            </div>
-                        </div>
-                        <button onClick={() => setIsTeleprompterVisible(false)} className="absolute top-2 right-2 text-white bg-black/50 rounded-full w-6 h-6 flex items-center justify-center text-lg z-10">&times;</button>
+                 {error ? (
+                    <div className="absolute inset-0 bg-gray-800 flex flex-col items-center justify-center text-white p-8 text-center z-10">
+                        <p className="text-lg font-semibold mb-2 text-red-400">Recording Unavailable</p>
+                        <p>{error}</p>
                     </div>
-                )}
+                 ) : (
+                    <>
+                         <video ref={videoRef} autoPlay muted playsInline className="absolute w-full h-full object-cover opacity-0 pointer-events-none"></video>
+                         <canvas ref={canvasRef} className={`w-full h-full object-cover transition-opacity duration-300 ${recordedBlob ? 'opacity-0' : 'opacity-100'}`}></canvas>
+                         <div className={`absolute inset-0 pointer-events-none overlay-${selectedOverlay}`}></div>
+                         {recordedBlob && <video key={videoSrc} src={videoSrc} controls autoPlay playsInline className="w-full h-full object-cover"></video>}
+                         {isRecording && <div className="absolute top-4 right-4 text-white bg-red-600 rounded-full px-3 py-1 text-sm font-bold animate-pulse">REC</div>}
+                         {isRecording && <div className="absolute bottom-4 left-4 text-white bg-black/50 rounded-md px-2 py-1 text-sm">0:{String(countdown).padStart(2, '0')}</div>}
+                         
+                         {isRecording && script && script.trim() !== '' && (
+                            <div className="absolute inset-0 bg-black/60 p-8 flex items-center justify-center overflow-hidden pointer-events-none">
+                                <div ref={teleprompterRef} className="w-full max-w-lg h-full overflow-y-scroll scrollbar-hide">
+                                    <p className="text-white text-2xl leading-relaxed font-semibold whitespace-pre-wrap text-center">
+                                        {script}
+                                    </p>
+                                </div>
+                            </div>
+                        )}
+                    </>
+                 )}
             </div>
         </main>
 
         {!recordedBlob && (
         <div className="px-6 pb-4 border-b space-y-4">
             <div>
-                <label className="text-sm font-medium text-gray-700 mb-2 block">Filters & Lenses</label>
-                <div className="flex flex-wrap gap-2">
-                    {filters.map(f => (
-                        <button key={f.id} onClick={() => setSelectedFilter(f.id)}
-                            className={`px-3 py-1 border rounded-md text-sm font-medium transition-colors ${selectedFilter === f.id ? 'bg-indigo-600 text-white border-indigo-600' : 'bg-white text-gray-700 hover:bg-gray-100'}`}
+                <h4 className="text-sm font-medium text-gray-700 mb-2">Video Effects</h4>
+                <div className="p-3 bg-gray-50 rounded-md border">
+                    <div className="flex border-b mb-3 -mx-3 px-3">
+                        <button
+                            onClick={() => setActiveTab('filters')}
+                            className={`-mb-px px-3 py-2 text-sm font-semibold transition-colors ${
+                                activeTab === 'filters'
+                                    ? 'border-b-2 border-indigo-500 text-indigo-600'
+                                    : 'text-gray-500 hover:text-gray-700 border-b-2 border-transparent'
+                            }`}
                         >
-                            {f.name}
+                            Filters
                         </button>
-                    ))}
+                        <button
+                            onClick={() => setActiveTab('overlays')}
+                            className={`-mb-px px-3 py-2 text-sm font-semibold transition-colors ${
+                                activeTab === 'overlays'
+                                    ? 'border-b-2 border-indigo-500 text-indigo-600'
+                                    : 'text-gray-500 hover:text-gray-700 border-b-2 border-transparent'
+                            }`}
+                        >
+                            Overlays
+                        </button>
+                    </div>
+                    
+                    {activeTab === 'filters' && (
+                        <div className="space-y-3">
+                            {Object.entries(filterGroups).map(([groupName, filters]) => (
+                                <div key={groupName}>
+                                    <label className="text-xs font-medium text-gray-600 mb-1.5 block">{groupName}</label>
+                                    <div className="flex flex-wrap gap-2">
+                                        {filters.map(f => (
+                                            <button key={f.id} onClick={() => setSelectedFilter(f.id)}
+                                                className={`px-3 py-1 border rounded-md text-sm font-medium transition-colors ${selectedFilter === f.id ? 'bg-indigo-600 text-white border-indigo-600' : 'bg-white text-gray-700 hover:bg-gray-100'}`}
+                                            >
+                                                {f.name}
+                                            </button>
+                                        ))}
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                    )}
+
+                    {activeTab === 'overlays' && (
+                         <div className="flex flex-wrap gap-2">
+                            {overlays.map(o => (
+                                <button key={o.id} onClick={() => setSelectedOverlay(o.id)}
+                                    className={`px-3 py-1 border rounded-md text-sm font-medium transition-colors ${selectedOverlay === o.id ? 'bg-indigo-600 text-white border-indigo-600' : 'bg-white text-gray-700 hover:bg-gray-100'}`}
+                                >
+                                    {o.name}
+                                </button>
+                            ))}
+                        </div>
+                    )}
                 </div>
             </div>
              <div>
-                <label className="text-sm font-medium text-gray-700 mb-2 block">AI Tools</label>
-                <button 
-                    onClick={handleGenerateScript}
-                    disabled={isGeneratingScript}
-                    className="w-full flex items-center justify-center px-4 py-2 border border-gray-300 text-sm font-medium rounded-md shadow-sm text-gray-700 bg-white hover:bg-gray-50 disabled:bg-gray-200 disabled:cursor-not-allowed"
-                >
-                    {isGeneratingScript ? (
-                        <>
-                         <svg className="animate-spin -ml-1 mr-3 h-5 w-5 text-gray-500" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                        </svg>
-                        Generating Script...
-                        </>
-                    ) : (
-                       <>
-                        <MagicWandIcon className="w-5 h-5 mr-2" /> Generate AI Script & Teleprompter
-                       </>
-                    )}
-                </button>
+                <h4 className="text-sm font-medium text-gray-700 mb-2">AI Script & Teleprompter</h4>
+                <div className="space-y-3 p-3 bg-gray-50 rounded-md border">
+                     <div className="flex items-center justify-between">
+                        <label htmlFor="subtitles-toggle" className="text-xs font-medium text-gray-600 flex-1">
+                            Generate Subtitles
+                        </label>
+                        <button
+                            id="subtitles-toggle"
+                            role="switch"
+                            aria-checked={isSubtitlesEnabled}
+                            onClick={() => setIsSubtitlesEnabled(!isSubtitlesEnabled)}
+                            className={`${isSubtitlesEnabled ? 'bg-indigo-600' : 'bg-gray-200'} relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2`}
+                            disabled={isRecording}
+                        >
+                            <span className={`${isSubtitlesEnabled ? 'translate-x-6' : 'translate-x-1'} inline-block h-4 w-4 transform rounded-full bg-white transition-transform`} />
+                        </button>
+                    </div>
+                    <textarea
+                        value={script || ''}
+                        onChange={(e) => setScript(e.target.value)}
+                        rows={4}
+                        placeholder="Paste your script here, or generate one with AI to get started."
+                        className="w-full text-sm px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500"
+                        disabled={isRecording}
+                    />
+                    <div className='grid grid-cols-2 gap-3'>
+                        <div>
+                            <label className="text-xs font-medium text-gray-600 mb-1 block">Scroll Speed</label>
+                            <div className="flex space-x-1 rounded-md bg-gray-200 p-1">
+                                {scrollSpeeds.map(item => (
+                                    <button
+                                        key={item.label}
+                                        onClick={() => setScrollSpeed(item.speed)}
+                                        className={`w-full rounded py-1 text-xs font-semibold transition-colors ${
+                                            scrollSpeed === item.speed
+                                                ? 'bg-white shadow-sm text-indigo-600'
+                                                : 'text-gray-600 hover:bg-gray-300'
+                                        }`}
+                                    >
+                                        {item.label}
+                                    </button>
+                                ))}
+                            </div>
+                        </div>
+                        <div className='self-end'>
+                             <button 
+                                onClick={handleGenerateScript}
+                                disabled={isGeneratingScript || !!error}
+                                className="w-full h-full flex items-center justify-center px-4 py-2 border border-gray-300 text-sm font-medium rounded-md shadow-sm text-gray-700 bg-white hover:bg-gray-50 disabled:bg-gray-200 disabled:cursor-not-allowed"
+                            >
+                                {isGeneratingScript ? (
+                                    <>
+                                     <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-gray-500" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>
+                                     Generating...
+                                    </>
+                                ) : (
+                                   <>
+                                    <MagicWandIcon className="w-5 h-5 mr-2" /> Generate Script
+                                   </>
+                                )}
+                            </button>
+                        </div>
+                    </div>
+                </div>
             </div>
         </div>
         )}
 
          <footer className="p-4 bg-gray-50 flex justify-between items-center">
           <div>
-            {!isRecording && !recordedBlob && <span className="text-sm text-gray-500">Max 40 seconds.</span>}
+            {!isRecording && !recordedBlob && <span className="text-sm text-gray-500">Max 60 seconds.</span>}
           </div>
           <div className="flex space-x-4">
             {isRecording ? (
@@ -260,7 +566,11 @@ export const VideoRecorderModal: React.FC<VideoRecorderModalProps> = ({ isOpen, 
             ) : (
                 <>
                     <button onClick={onClose} className="px-4 py-2 border border-gray-300 rounded-md text-sm font-medium text-gray-700 hover:bg-gray-100">Cancel</button>
-                    <button onClick={handleStartRecording} className="px-6 py-2 border border-transparent rounded-md text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700">Record</button>
+                    <button 
+                        onClick={handleStartRecording} 
+                        disabled={!stream || !!error}
+                        className="px-6 py-2 border border-transparent rounded-md text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700 disabled:bg-indigo-300 disabled:cursor-not-allowed"
+                    >Record</button>
                 </>
             )}
           </div>
@@ -286,6 +596,29 @@ export const VideoRecorderModal: React.FC<VideoRecorderModalProps> = ({ isOpen, 
         .scrollbar-hide {
             -ms-overflow-style: none;
             scrollbar-width: none;
+        }
+        .overlay-none { display: none; }
+        .overlay-vignette { box-shadow: inset 0 0 5vw 2vw rgba(0,0,0,0.6); }
+        .overlay-cinematic-bars {
+            border-top: 12.5% solid black;
+            border-bottom: 12.5% solid black;
+            box-sizing: border-box;
+        }
+        @keyframes lightLeakAnimation {
+            0% { opacity: 0; transform: translateX(-20%) translateY(-20%); }
+            25% { opacity: 0.3; }
+            50% { opacity: 0.1; transform: translateX(20%) translateY(20%); }
+            75% { opacity: 0.4; }
+            100% { opacity: 0; transform: translateX(-20%) translateY(-20%); }
+        }
+        .overlay-light-leak::after {
+            content: '';
+            position: absolute;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background: radial-gradient(circle at 10% 10%, rgba(255, 82, 82, 0.4) 0%, rgba(255, 82, 82, 0) 40%),
+                        radial-gradient(circle at 90% 80%, rgba(82, 255, 224, 0.4) 0%, rgba(82, 255, 224, 0) 50%);
+            animation: lightLeakAnimation 10s infinite alternate;
+            mix-blend-mode: screen;
         }
       `}</style>
     </div>

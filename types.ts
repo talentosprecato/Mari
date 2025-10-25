@@ -56,11 +56,21 @@ export interface CVData {
   videoUrl: string;
 }
 
-export type SectionId = 'personal' | 'experience' | 'education' | 'skills' | 'projects' | 'certifications' | 'video' | 'professionalNarrative';
+export type SectionId = 'personal' | 'experience' | 'education' | 'skills' | 'projects' | 'certifications' | 'video' | 'professionalNarrative' | 'jobSearch';
 
 export type CVDataFromAI = Omit<CVData, 'experience' | 'education' | 'projects' | 'certifications'> & {
     experience: Omit<Experience, 'id'>[];
     education: Omit<Education, 'id'>[];
     projects: Omit<Project, 'id'>[];
     certifications: Omit<Certification, 'id'>[];
+}
+
+export interface CompanyInfo {
+  name: string;
+  careersUrl: string;
+}
+
+export interface JobSuggestion {
+  jobTitle: string;
+  companies: CompanyInfo[];
 }

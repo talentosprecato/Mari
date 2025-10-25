@@ -1,6 +1,6 @@
 
-import { GoogleGenAI, Type } from "@google/genai";
-import { CVData, CVDataFromAI, SectionId } from "../types";
+import { GoogleGenAI, Type, LiveServerMessage, Modality } from "@google/genai";
+import { CVData, CVDataFromAI, SectionId, JobSuggestion } from "../types";
 
 const API_KEY = process.env.API_KEY;
 
@@ -37,6 +37,20 @@ const templatePrompts: Record<string, string> = {
 - **Layout:** Follow a traditional, conservative, single-column format.
 - **Objective:** Start with a formal "Career Objective" statement instead of a summary.
 - **Style:** Use a clear, chronological order for experience and education. Maintain a highly formal and professional tone. Do not use any icons or visual flair. Prioritize clarity and tradition.`,
+  'eu-cv': `
+- **Title:** The document must start with the title "Curriculum Vitae" at the top.
+- **Layout:** Use a very clean, structured, single-column layout. Prioritize clarity and completeness.
+- **Sections:** The CV should follow this strict order of sections:
+    1. **Personal Information:** Include Full Name, Address, Telephone, Email, and links (Website/LinkedIn).
+    2. **Work Experience:** List in reverse chronological order. For each entry, include dates, occupation/position held, main activities and responsibilities, and employer name and location.
+    3. **Education and Training:** List in reverse chronological order. For each entry, include dates, title of qualification awarded, principal subjects/occupational skills covered, and the name and location of the organisation providing education or training.
+    4. **Personal Skills:** This section should be divided into sub-sections:
+        - **Mother tongue(s)**
+        - **Other language(s):** Use a simple description for proficiency (e.g., "Proficient", "Intermediate", "Basic").
+        - **Communication skills**
+        - **Organisational / managerial skills**
+        - **Digital skills**
+- **Style:** The tone must be formal and professional. Use bold for titles and employers/institutions. Do not use any icons, tables for layout, or creative visual elements. The focus is on a standardized, easy-to-read format.`,
   'ai-content-editor': `
 - **Layout:** A modern, hybrid layout that could suggest a two-column feel where one part lists technical skills (Python, APIs, Prompt Engineering, etc.) and the other details content projects.
 - **Summary:** A "Profile" section that clearly states expertise in both AI tools and content strategy.
@@ -76,8 +90,9 @@ const buildPrompt = (data: CVData, templateId: string, sectionOrder: SectionId[]
     if (s === 'personal') return 'Personal Details';
     if (s === 'professionalNarrative') return 'Professional Narrative';
     if (s === 'video') return 'Video Presentation';
+    if (s === 'jobSearch') return ''; // Don't include this in the CV itself
     return s.charAt(0).toUpperCase() + s.slice(1);
-  });
+  }).filter(Boolean);
 
   const langConfig = languageConfig[language] || languageConfig['en'];
   const languageName = langConfig.name;
@@ -172,7 +187,7 @@ You are an expert career coach. Your task is to write a short, compelling, and p
 3.  **Structure:** The script should have three parts:
     *   **Introduction:** A brief, engaging opening (e.g., "Hello, I'm [Full Name]...").
     *   **Core Message:** Highlight their main area of expertise and mention one key achievement from their experience or projects that demonstrates their value. Use quantifiable results if available.
-    *   **Closing:** A short, forward-looking statement about what they are passionate about or what kind of role they are seeking.
+    *   **Closing:** A short, forward-looking statement that concludes by prompting the user to state their goal. It should end with a clear placeholder like "[State your desired role or the type of company you're targeting here]". The text inside the brackets should be translated to the target language.
 4.  **Tone:** The tone should be confident, authentic, and professional.
 5.  **Output:** Provide only the raw script text. Do not include any headings, introductory phrases like "Here's the script:", or markdown formatting. The output should be ready to be copy-pasted into a teleprompter.
 
@@ -198,6 +213,32 @@ ${JSON.stringify({ personal: data.personal, experience: data.experience, project
         throw new Error("Failed to generate video script.");
     }
 };
+
+export const startLiveTranscriptionSession = (
+    onMessage: (message: LiveServerMessage) => void,
+    onError: (e: Event) => void,
+    language: string
+) => {
+    const langConfig = languageConfig[language] || languageConfig['en'];
+    const languageName = langConfig.name;
+
+    const sessionPromise = ai.live.connect({
+        model: 'gemini-2.5-flash-native-audio-preview-09-2025',
+        callbacks: {
+            onopen: () => { console.log('Live session opened for transcription.'); },
+            onmessage: onMessage,
+            onerror: onError,
+            onclose: () => { console.log('Live session closed.'); },
+        },
+        config: {
+            responseModalities: [Modality.AUDIO], 
+            inputAudioTranscription: {},
+            systemInstruction: `You are a live transcriber. Your only task is to accurately transcribe the user's speech in ${languageName}. Do not respond or generate any other content.`,
+        },
+    });
+    return sessionPromise;
+};
+
 
 const cvDataSchema = {
     type: Type.OBJECT,
@@ -363,5 +404,84 @@ You are an expert CV parser and career coach. Your task is to analyze the follow
     } catch (error) {
         console.error("Error parsing CV with Gemini API:", error);
         throw new Error("Failed to parse CV. The AI could not process the provided file.");
+    }
+};
+
+export const findJobOpportunities = async (cvData: CVData, cities: string, language: string): Promise<JobSuggestion[]> => {
+    const langConfig = languageConfig[language] || languageConfig['en'];
+    const languageName = langConfig.name;
+
+    const prompt = `
+You are an expert career advisor and job search assistant.
+Based on the following CV data, suggest 3 relevant job titles in ${languageName}.
+For each job title, use Google Search to find 3-5 companies that are likely hiring for that role in the following cities: ${cities}.
+For each company, provide the company name and a direct link to their careers or jobs page.
+
+Return the result as a single, valid JSON array of objects that can be parsed directly. The JSON should follow this structure: \`[{jobTitle: string, companies: [{name: string, careersUrl: string}]}]\`.
+Do not include any text before or after the JSON array. Do not use markdown backticks around the JSON.
+
+**CV Data:**
+\`\`\`json
+${JSON.stringify({personal: cvData.personal, experience: cvData.experience, skills: cvData.skills, projects: cvData.projects }, null, 2)}
+\`\`\`
+`;
+    try {
+        const response = await ai.models.generateContent({
+           model: "gemini-2.5-pro",
+           contents: prompt,
+           config: {
+             tools: [{googleSearch: {}}],
+           },
+        });
+
+        const text = response.text;
+        if (text) {
+             // Clean the response to ensure it's valid JSON
+            const jsonString = text.trim().replace(/^```json\s*|```\s*$/g, '');
+            return JSON.parse(jsonString) as JobSuggestion[];
+        } else {
+            throw new Error("Received an empty response from the job search API.");
+        }
+    } catch (error) {
+        console.error("Error finding job opportunities:", error);
+        throw new Error("Failed to find job opportunities. The AI may have returned an unexpected format.");
+    }
+};
+
+export const draftCoverLetter = async (cvData: CVData, jobTitle: string, companyName: string, language: string): Promise<string> => {
+    const langConfig = languageConfig[language] || languageConfig['en'];
+    const languageName = langConfig.name;
+    
+    const prompt = `
+You are a professional career coach specializing in writing compelling cover letters.
+Your task is to write a concise and professional cover letter for the role of "${jobTitle}" at "${companyName}".
+The letter must be written in **${languageName}**.
+
+**Instructions:**
+- Base the letter on the applicant's CV provided below.
+- Highlight 1-2 key experiences or skills from the CV that are most relevant to the job title.
+- Keep the tone professional, enthusiastic, and tailored to the company.
+- The output should be only the text of the cover letter, ready to be copied into an email. Do not include a subject line, salutation (like "Dear Hiring Manager,"), or closing (like "Sincerely, [Name]"). Just provide the body paragraphs.
+
+**Applicant's CV Data:**
+\`\`\`json
+${JSON.stringify({ personal: cvData.personal, experience: cvData.experience, skills: cvData.skills, projects: cvData.projects, professionalNarrative: cvData.professionalNarrative }, null, 2)}
+\`\`\`
+`;
+    try {
+        const response = await ai.models.generateContent({
+            model: 'gemini-2.5-pro',
+            contents: prompt,
+        });
+
+        const text = response.text;
+        if (text) {
+            return text;
+        } else {
+            throw new Error("Received an empty response from the cover letter API.");
+        }
+    } catch (error) {
+        console.error("Error drafting cover letter:", error);
+        throw new Error("Failed to draft the cover letter.");
     }
 };

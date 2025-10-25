@@ -34,6 +34,12 @@ const templates: Template[] = [
     longDescription: 'Best suited for traditional industries like law, finance, or academia. Follows a formal structure with a clear chronological order, prioritizing professionalism over visual embellishments.'
   },
   {
+    id: 'eu-cv',
+    name: 'EU CV',
+    description: 'A standard, minimal European format.',
+    longDescription: 'Follows the standard European CV format. A clean, structured, and comprehensive layout ideal for applications within the EU. Focuses on clarity and detailed information.'
+  },
+  {
     id: 'ai-content-editor',
     name: 'AI Content Editor',
     description: 'Highlights AI skills and content creation experience.',

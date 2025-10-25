@@ -1,7 +1,6 @@
-
 import React, { useEffect, useState, useRef } from 'react';
 import { TemplateSelector } from './TemplateSelector';
-import { DownloadIcon, SparklesIcon, DocxIcon } from './icons';
+import { DownloadIcon, SparklesIcon, DocxIcon, XCircleIcon, GoogleDriveIcon } from './icons';
 
 // This is a global function from the 'marked' library loaded in index.html
 declare global {
@@ -229,13 +228,22 @@ const CVPreviewStyles = () => (
         .video-presentation-section {
             margin-bottom: 1em;
         }
-        .video-presentation-section video {
+        .video-presentation-section .video-container {
             width: 100%;
+            aspect-ratio: 16 / 9;
             border-radius: 0.5rem;
             box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
             background-color: #000;
             margin-top: 0.5em;
+            overflow: hidden;
         }
+        .video-presentation-section video,
+        .video-presentation-section iframe {
+            width: 100%;
+            height: 100%;
+            border: none;
+        }
+
 
         /* Photo & Table Styles */
         .cv-preview-content table {
@@ -325,10 +333,49 @@ const Placeholder = () => (
     </div>
 )
 
+const getVideoEmbed = (url: string) => {
+  if (!url) return null;
+
+  // YouTube
+  const youtubeRegex = /(?:youtube\.com\/(?:[^\/]+\/.+\/|(?:v|e(?:mbed)?)\/|.*[?&]v=)|youtu\.be\/)([^"&?\/ ]{11})/;
+  const youtubeMatch = url.match(youtubeRegex);
+  if (youtubeMatch && youtubeMatch[1]) {
+    const videoId = youtubeMatch[1];
+    return (
+      <div className="video-container">
+        <iframe
+          src={`https://www.youtube.com/embed/${videoId}`}
+          allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+          allowFullScreen
+          title="Embedded YouTube Video"
+        ></iframe>
+      </div>
+    );
+  }
+
+  // Blob URL (from recording or file upload)
+  if (url.startsWith('blob:')) {
+    return (
+      <div className="video-container">
+        <video key={url} controls src={url}></video>
+      </div>
+    );
+  }
+
+  // Fallback for other URLs (LinkedIn, Facebook, etc.)
+  return (
+    <div className="p-4 text-sm bg-gray-100 rounded-md">
+      <p>A video presentation is available at the following link:</p>
+      <a href={url} target="_blank" rel="noopener noreferrer" className="text-indigo-600 hover:underline break-all">{url}</a>
+    </div>
+  );
+};
+
 
 export const CVPreview: React.FC<CVPreviewProps> = ({ markdownContent, isLoading, error, selectedTemplate, onTemplateChange, onGenerate, videoUrl, photoAlignment, onPhotoAlignmentChange }) => {
   const [htmlContent, setHtmlContent] = useState('');
-  const [isExporting, setIsExporting] = useState<false | 'pdf' | 'docx'>(false);
+  const [isExporting, setIsExporting] = useState<false | 'pdf' | 'docx' | 'drive'>(false);
+  const [exportError, setExportError] = useState<string | null>(null);
   const previewRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -340,10 +387,18 @@ export const CVPreview: React.FC<CVPreviewProps> = ({ markdownContent, isLoading
     }
   }, [markdownContent]);
 
+  useEffect(() => {
+    if (exportError) {
+      const timer = setTimeout(() => setExportError(null), 5000);
+      return () => clearTimeout(timer);
+    }
+  }, [exportError]);
+
   const handleExportPDF = async () => {
     if (!previewRef.current || !markdownContent) return;
 
     setIsExporting('pdf');
+    setExportError(null);
     try {
         const { jsPDF } = window.jspdf;
         const canvas = await window.html2canvas(previewRef.current, {
@@ -378,16 +433,17 @@ export const CVPreview: React.FC<CVPreviewProps> = ({ markdownContent, isLoading
 
     } catch (err) {
         console.error("Failed to export PDF", err);
-        alert("Sorry, there was an error exporting the PDF. Please try again.");
+        setExportError("Sorry, there was an error exporting the PDF. Please try again.");
     } finally {
         setIsExporting(false);
     }
   };
   
-    const handleExportDOCX = async () => {
+  const handleExportDOCX = async () => {
     if (!previewRef.current || !markdownContent) return;
 
     setIsExporting('docx');
+    setExportError(null);
     try {
         // Clone the element to avoid modifying the original
         const contentNode = previewRef.current.cloneNode(true) as HTMLElement;
@@ -415,10 +471,22 @@ export const CVPreview: React.FC<CVPreviewProps> = ({ markdownContent, isLoading
 
     } catch (err) {
         console.error("Failed to export DOCX", err);
-        alert("Sorry, there was an error exporting the DOCX. Please try again.");
+        setExportError("Sorry, there was an error exporting the DOCX. Please try again.");
     } finally {
         setIsExporting(false);
     }
+  };
+
+  const handleSaveToDrive = async () => {
+    if (!previewRef.current || !markdownContent) return;
+
+    setIsExporting('drive');
+    setExportError(null);
+    // Simulate API call and show message, as a full OAuth implementation is out of scope.
+    setTimeout(() => {
+        setExportError("Save to Google Drive functionality is not yet implemented.");
+        setIsExporting(false);
+    }, 1500);
   };
 
 
@@ -433,7 +501,7 @@ export const CVPreview: React.FC<CVPreviewProps> = ({ markdownContent, isLoading
                 {videoUrl && (
                      <div className="video-presentation-section">
                         <h2>Video Presentation</h2>
-                        <video key={videoUrl} controls src={videoUrl} />
+                        {getVideoEmbed(videoUrl)}
                     </div>
                 )}
                 <div
@@ -445,11 +513,18 @@ export const CVPreview: React.FC<CVPreviewProps> = ({ markdownContent, isLoading
   }
 
   return (
-    <div className="bg-white p-6 sm:p-8 rounded-lg shadow-md sticky top-24">
+    <div className="bg-white/80 backdrop-blur-sm p-6 sm:p-8 rounded-lg shadow-md sticky top-24">
         <CVPreviewStyles />
         <div className="flex flex-wrap justify-between items-center mb-6 border-b pb-3 gap-4">
             <h2 className="text-2xl font-bold text-gray-900">CV Preview</h2>
             <div className="flex items-center space-x-2">
+                 <button
+                    onClick={handleSaveToDrive}
+                    disabled={!markdownContent || isLoading || !!isExporting}
+                    className="flex items-center justify-center px-3 py-2 border border-gray-300 text-sm font-medium rounded-md shadow-sm text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 disabled:bg-gray-200 disabled:text-gray-500 disabled:cursor-not-allowed"
+                >
+                    {isExporting === 'drive' ? 'Saving...' : <><GoogleDriveIcon className="w-5 h-5 mr-2" /> Drive</>}
+                </button>
                 <button
                     onClick={handleExportDOCX}
                     disabled={!markdownContent || isLoading || !!isExporting}
@@ -487,6 +562,13 @@ export const CVPreview: React.FC<CVPreviewProps> = ({ markdownContent, isLoading
             </div>
         </div>
         
+        {exportError && (
+          <div className="mb-4 flex items-center space-x-2 text-sm text-red-600 bg-red-50 p-3 rounded-md">
+              <XCircleIcon className="h-5 w-5" />
+              <span>{exportError}</span>
+          </div>
+        )}
+
         <div className='grid grid-cols-1 md:grid-cols-2 gap-x-8'>
             <TemplateSelector 
                 selectedTemplate={selectedTemplate}
@@ -499,7 +581,7 @@ export const CVPreview: React.FC<CVPreviewProps> = ({ markdownContent, isLoading
         </div>
         
         <div className={`template-${selectedTemplate}`}>
-            <div className="min-h-[600px] border rounded-lg p-4 bg-gray-50 shadow-inner">
+            <div className="min-h-[600px] border rounded-lg p-4 bg-white shadow-inner">
                 {renderContent()}
             </div>
         </div>

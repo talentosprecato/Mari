@@ -1,4 +1,5 @@
 
+
 import React, { useState, useCallback } from 'react';
 import { CVForm } from './components/CVForm';
 import { CVPreview } from './components/CVPreview';
@@ -8,6 +9,7 @@ import { CVData, SectionId } from './types';
 import { GithubIcon, SparklesIcon, CheckCircleIcon, XCircleIcon } from './components/icons';
 import { EnhancePreviewModal } from './components/EnhancePreviewModal';
 import { LanguageSelector } from './components/LanguageSelector';
+import { JobOpportunityModal } from './components/JobOpportunityModal';
 
 const SaveStatusIndicator: React.FC<{ status: 'idle' | 'saving' | 'saved' | 'error' }> = ({ status }) => {
     const visible = status !== 'idle';
@@ -43,6 +45,8 @@ const SaveStatusIndicator: React.FC<{ status: 'idle' | 'saving' | 'saved' | 'err
     );
 };
 
+const brandAvatar = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAABQAAAAODAQMAAADs1/DMAAAABlBMVEVHcEz///+flKJDAAAAAXNSR0IArs4c6QAAAARnQU1BAACxjwv8YQUAAAAJcEhZcwAADsMAAA7DAcdvqGQAAAA0SURBVDiN7cExAQAAAMKg9U9tCU+gAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAH4MWXwAAb6G/CsAAAAASUVORK5CYII=";
+
 
 const App: React.FC = () => {
   const { 
@@ -76,13 +80,14 @@ const App: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
   const [selectedTemplate, setSelectedTemplate] = useState<string>('modern');
   const [photoAlignment, setPhotoAlignment] = useState<'left' | 'right' | 'none'>('right');
-  const [sections, setSections] = useState<SectionId[]>(['personal', 'experience', 'education', 'skills', 'projects', 'certifications', 'video', 'professionalNarrative']);
+  const [sections, setSections] = useState<SectionId[]>(['personal', 'experience', 'education', 'skills', 'projects', 'certifications', 'video', 'professionalNarrative', 'jobSearch']);
   const [language, setLanguage] = useState('en');
   
   const [isEnhancing, setIsEnhancing] = useState(false);
   const [showEnhancePreviewModal, setShowEnhancePreviewModal] = useState(false);
   const [pendingEnhancedData, setPendingEnhancedData] = useState<CVData | null>(null);
   const [enhancedPreviewMd, setEnhancedPreviewMd] = useState('');
+  const [isJobModalOpen, setIsJobModalOpen] = useState(false);
 
 
   const handleGenerateCV = useCallback(async () => {
@@ -145,8 +150,8 @@ const App: React.FC = () => {
 
 
   return (
-    <div className="min-h-screen bg-gray-50 text-gray-800 font-sans">
-      <header className="bg-white shadow-sm sticky top-0 z-10">
+    <div className="min-h-screen bg-gradient-to-br from-green-50 to-cyan-100 text-gray-800 font-sans flex flex-col">
+      <header className="bg-white/80 backdrop-blur-sm shadow-sm sticky top-0 z-10">
         <div className="container mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between items-center py-4">
             <div className="flex items-center space-x-3">
@@ -164,7 +169,7 @@ const App: React.FC = () => {
         </div>
       </header>
       
-      <main className="container mx-auto p-4 sm:p-6 lg:p-8 grid grid-cols-1 lg:grid-cols-2 gap-8 items-start">
+      <main className="container mx-auto p-4 sm:p-6 lg:p-8 grid grid-cols-1 lg:grid-cols-2 gap-8 items-start flex-grow">
         <CVForm
           cvData={cvData}
           onPersonalChange={updatePersonal}
@@ -193,6 +198,7 @@ const App: React.FC = () => {
           onEnhanceCV={handleEnhanceCV}
           isEnhancing={isEnhancing}
           language={language}
+          onOpenJobModal={() => setIsJobModalOpen(true)}
         />
         <CVPreview 
           markdownContent={generatedMd} 
@@ -207,11 +213,32 @@ const App: React.FC = () => {
         />
       </main>
 
+      <footer className="text-center py-6 text-sm text-gray-600">
+        <div className="container mx-auto flex items-center justify-center space-x-3">
+          <img 
+            src={brandAvatar}
+            alt="veravox/MariIndennitate avatar" 
+            className="w-10 h-10 rounded-full object-cover border-2 border-white shadow-sm" 
+          />
+          <span>
+            App made by <a href="https://github.com/veravox" target="_blank" rel="noopener noreferrer" className="font-semibold text-gray-700 hover:text-indigo-600">veravox/MariIndennitate</a>
+          </span>
+        </div>
+      </footer>
+
+
       <EnhancePreviewModal
         isOpen={showEnhancePreviewModal}
         markdownContent={enhancedPreviewMd}
         onAccept={handleAcceptEnhancement}
         onCancel={handleCancelEnhancement}
+      />
+
+      <JobOpportunityModal
+        isOpen={isJobModalOpen}
+        onClose={() => setIsJobModalOpen(false)}
+        cvData={cvData}
+        language={language}
       />
     </div>
   );

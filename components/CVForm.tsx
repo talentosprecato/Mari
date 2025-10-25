@@ -1,7 +1,7 @@
 
 import React, { useRef, useState, useCallback } from 'react';
 import { CVData, PersonalDetails, Experience, Education, SectionId, Project, Certification } from '../types';
-import { PlusIcon, TrashIcon, SparklesIcon, DragHandleIcon, UploadIcon, FileIcon, XCircleIcon, RecordIcon, VideoPlusIcon, CameraIcon } from './icons';
+import { PlusIcon, TrashIcon, SparklesIcon, DragHandleIcon, UploadIcon, FileIcon, XCircleIcon, RecordIcon, VideoPlusIcon, CameraIcon, BriefcaseIcon } from './icons';
 import { VideoRecorderModal } from './VideoRecorderModal';
 
 interface CVFormProps {
@@ -32,6 +32,7 @@ interface CVFormProps {
   onEnhanceCV: (file: File) => void;
   isEnhancing: boolean;
   language: string;
+  onOpenJobModal: () => void;
 }
 
 const Section: React.FC<{ title: string; children: React.ReactNode }> = ({ title, children }) => (
@@ -65,6 +66,40 @@ const Textarea: React.FC<React.TextareaHTMLAttributes<HTMLTextAreaElement> & { l
   </div>
 );
 
+const renderVideoPreview = (url: string) => {
+    if (!url) return null;
+
+    const youtubeRegex = /(?:youtube\.com\/(?:[^\/]+\/.+\/|(?:v|e(?:mbed)?)\/|.*[?&]v=)|youtu\.be\/)([^"&?\/ ]{11})/;
+    const youtubeMatch = url.match(youtubeRegex);
+    if (youtubeMatch && youtubeMatch[1]) {
+        const videoId = youtubeMatch[1];
+        return (
+            <iframe
+              className='max-h-full max-w-full rounded-md shadow-inner w-full h-full'
+              src={`https://www.youtube.com/embed/${videoId}`}
+              allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+              allowFullScreen
+              title="Embedded YouTube Video"
+            ></iframe>
+        );
+    }
+    
+    if (url.startsWith('blob:') || url.endsWith('.mp4') || url.endsWith('.webm') || url.endsWith('.ogg')) {
+        return <video key={url} controls src={url} className='max-h-full max-w-full rounded-md shadow-inner'></video>;
+    }
+
+    // Fallback for other URLs
+    return (
+        <div className="w-full h-full flex items-center justify-center bg-gray-100 p-4 rounded-md">
+            <div className='text-center'>
+                <p className="text-sm text-gray-700">Video link added:</p>
+                <a href={url} target="_blank" rel="noopener noreferrer" className="text-sm text-indigo-600 hover:underline break-all">{url}</a>
+            </div>
+        </div>
+    );
+};
+
+
 export const CVForm: React.FC<CVFormProps> = ({
   cvData,
   onPersonalChange,
@@ -93,6 +128,7 @@ export const CVForm: React.FC<CVFormProps> = ({
   onEnhanceCV,
   isEnhancing,
   language,
+  onOpenJobModal,
 }) => {
   const sectionDragItem = useRef<number | null>(null);
   const sectionDragOverItem = useRef<number | null>(null);
@@ -117,6 +153,7 @@ export const CVForm: React.FC<CVFormProps> = ({
 
   const [isVideoRecorderOpen, setIsVideoRecorderOpen] = useState(false);
   const [videoError, setVideoError] = useState<string | null>(null);
+  const [videoUrlInput, setVideoUrlInput] = useState('');
 
 
   const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -155,7 +192,7 @@ export const CVForm: React.FC<CVFormProps> = ({
     sectionDragOverItem.current = null;
     setIsSectionDragging(false);
   };
-
+  
   const createDragHandlers = (
     itemRef: React.MutableRefObject<number | null>,
     overItemRef: React.MutableRefObject<number | null>,
@@ -170,10 +207,8 @@ export const CVForm: React.FC<CVFormProps> = ({
     },
     onDrop: () => {
         if (itemRef.current !== null && overItemRef.current !== null) {
-            reorderFn(itemRef.current, overItemRef.current);
+          reorderFn(itemRef.current, overItemRef.current);
         }
-        itemRef.current = null;
-        overItemRef.current = null;
     },
     onDragEnd: () => {
         itemRef.current = null;
@@ -185,88 +220,78 @@ export const CVForm: React.FC<CVFormProps> = ({
   const eduDragHandlers = createDragHandlers(eduDragItem, eduDragOverItem, onReorderEducation);
   const projDragHandlers = createDragHandlers(projDragItem, projDragOverItem, onReorderProject);
   const certDragHandlers = createDragHandlers(certDragItem, certDragOverItem, onReorderCertification);
+  
+  const handlePhotoChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files && e.target.files[0]) {
+      const file = e.target.files[0];
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        onPhotoChange(reader.result as string);
+      };
+      reader.readAsDataURL(file);
+    }
+  };
 
-  const handleVideoUpload = useCallback((event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
-    if (!file) return;
-
-    setVideoError(null);
-    const video = document.createElement('video');
-    video.preload = 'metadata';
-    
-    video.onloadedmetadata = () => {
-        window.URL.revokeObjectURL(video.src);
-        if (video.duration > 40) {
-            setVideoError('Video must be 40 seconds or less.');
-        } else {
-            const videoUrl = URL.createObjectURL(file);
-            onVideoUrlChange(videoUrl);
+  const handleVideoFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+    if (event.target.files && event.target.files[0]) {
+        const file = event.target.files[0];
+        if (file.size > 50 * 1024 * 1024) { // 50MB limit
+            setVideoError('File size should not exceed 50MB.');
+            return;
         }
-    };
-
-    video.onerror = () => {
-        setVideoError('Could not load video metadata. The file might be corrupted or in an unsupported format.');
-        if (video.src) {
-          window.URL.revokeObjectURL(video.src);
-        }
-    };
-    
-    video.src = URL.createObjectURL(file);
-    event.target.value = ''; // Reset file input
-  }, [onVideoUrlChange]);
-
-  const handleSaveRecordedVideo = (videoBlob: Blob) => {
-    const videoUrl = URL.createObjectURL(videoBlob);
-    onVideoUrlChange(videoUrl);
+        setVideoError(null);
+        const url = URL.createObjectURL(file);
+        onVideoUrlChange(url);
+    }
+  };
+  
+  const handleVideoUrlInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setVideoUrlInput(e.target.value);
+  };
+  
+  const handleVideoUrlInputBlur = () => {
+    if(videoUrlInput) {
+        onVideoUrlChange(videoUrlInput);
+    }
+  };
+  
+  const handleVideoSave = (videoBlob: Blob) => {
+    const url = URL.createObjectURL(videoBlob);
+    onVideoUrlChange(url);
     setIsVideoRecorderOpen(false);
   };
 
-  const handlePhotoUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
-    if (!file) return;
 
-    const reader = new FileReader();
-    reader.onloadend = () => {
-        onPhotoChange(reader.result as string);
-    };
-    reader.readAsDataURL(file);
-    event.target.value = ''; // Reset input
-  };
-
-  const sectionComponents: Record<SectionId, React.ReactNode> = {
+  const sectionsMap: Record<SectionId, React.ReactNode> = {
     personal: (
       <Section title="Personal Details">
-        <div className="flex flex-col-reverse sm:flex-row gap-6 items-start">
-            <div className="flex-grow grid grid-cols-1 md:grid-cols-2 gap-4">
-                <Input label="Full Name" value={cvData.personal.fullName} onChange={(e) => onPersonalChange('fullName', e.target.value)} />
-                <Input label="Email" type="email" value={cvData.personal.email} onChange={(e) => onPersonalChange('email', e.target.value)} />
-                <Input label="Phone" value={cvData.personal.phone} onChange={(e) => onPersonalChange('phone', e.target.value)} />
-                <Input label="Address" value={cvData.personal.address} onChange={(e) => onPersonalChange('address', e.target.value)} />
-                <Input label="LinkedIn Profile URL" value={cvData.personal.linkedin} onChange={(e) => onPersonalChange('linkedin', e.target.value)} />
-                <Input label="Website/Portfolio URL" value={cvData.personal.website} onChange={(e) => onPersonalChange('website', e.target.value)} />
-            </div>
-            <div className="flex-shrink-0 w-32 mx-auto sm:mx-0 space-y-2">
-                <input
-                    type="file"
-                    ref={photoInputRef}
-                    onChange={handlePhotoUpload}
-                    accept="image/png, image/jpeg"
-                    className="hidden"
-                />
-                <div className="w-32 h-32 rounded-full border-2 border-dashed flex items-center justify-center bg-gray-50 overflow-hidden text-gray-400">
-                    {cvData.personal.photo ? (
-                        <img src={cvData.personal.photo} alt="Profile" className="w-full h-full object-cover" />
-                    ) : (
-                        <div className='text-center'>
-                           <CameraIcon className="w-8 h-8 mx-auto" />
-                           <p className='text-xs mt-1'>Photo</p>
-                        </div>
-                    )}
-                </div>
-                 {cvData.personal.photo ? (
-                    <button onClick={() => onPhotoChange('')} className="w-full text-center text-sm font-medium text-red-600 hover:text-red-800 transition-colors">Remove</button>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <Input label="Full Name" value={cvData.personal.fullName} onChange={(e) => onPersonalChange('fullName', e.target.value)} />
+            <Input label="Email" type="email" value={cvData.personal.email} onChange={(e) => onPersonalChange('email', e.target.value)} />
+            <Input label="Phone" type="tel" value={cvData.personal.phone} onChange={(e) => onPersonalChange('phone', e.target.value)} />
+            <Input label="Address" value={cvData.personal.address} onChange={(e) => onPersonalChange('address', e.target.value)} />
+            <Input label="LinkedIn Profile URL" value={cvData.personal.linkedin} onChange={(e) => onPersonalChange('linkedin', e.target.value)} />
+            <Input label="Website/Portfolio URL" value={cvData.personal.website} onChange={(e) => onPersonalChange('website', e.target.value)} />
+        </div>
+        <div className="mt-4">
+            <label className="block text-sm font-medium text-gray-700 mb-1">Profile Photo</label>
+            <div className="flex items-center space-x-4">
+                {cvData.personal.photo ? (
+                    <img src={cvData.personal.photo} alt="Profile" className="w-20 h-20 rounded-full object-cover" />
                 ) : (
-                    <button onClick={() => photoInputRef.current?.click()} className="w-full text-center text-sm font-medium text-indigo-600 hover:text-indigo-800 transition-colors">Upload</button>
+                    <div className="w-20 h-20 rounded-full bg-gray-200 flex items-center justify-center text-gray-500">
+                        <CameraIcon className="w-8 h-8" />
+                    </div>
+                )}
+                <input type="file" accept="image/*" onChange={handlePhotoChange} ref={photoInputRef} className="hidden" />
+                <button
+                    onClick={() => photoInputRef.current?.click()}
+                    className="px-3 py-2 border border-gray-300 rounded-md text-sm font-medium text-gray-700 hover:bg-gray-50"
+                >
+                    {cvData.personal.photo ? 'Change Photo' : 'Upload Photo'}
+                </button>
+                 {cvData.personal.photo && (
+                    <button onClick={() => onPhotoChange('')} className="text-red-600 hover:text-red-800 text-sm">Remove</button>
                 )}
             </div>
         </div>
@@ -274,284 +299,317 @@ export const CVForm: React.FC<CVFormProps> = ({
     ),
     experience: (
       <Section title="Work Experience">
-        {cvData.experience.map((exp, index) => (
-          <div key={exp.id} 
-            draggable
-            onDragStart={(e) => expDragHandlers.onDragStart(e, index)}
-            onDragEnter={(e) => expDragHandlers.onDragEnter(e, index)}
-            onDrop={expDragHandlers.onDrop}
-            onDragEnd={expDragHandlers.onDragEnd}
-            onDragOver={(e) => e.preventDefault()}
-          >
-            <div className="p-4 border rounded-md space-y-4 relative bg-gray-50/50">
-                <div className="absolute top-2 right-2 flex items-center space-x-2">
+        <div className="space-y-4">
+          {cvData.experience.map((exp, index) => (
+            <div key={exp.id} 
+                draggable 
+                onDragStart={(e) => expDragHandlers.onDragStart(e, index)}
+                onDragEnter={(e) => expDragHandlers.onDragEnter(e, index)}
+                onDragEnd={expDragHandlers.onDragEnd}
+                onDrop={expDragHandlers.onDrop}
+                onDragOver={(e) => e.preventDefault()}
+                className="p-4 border rounded-md bg-gray-50/50"
+            >
+              <div className="flex justify-between items-start mb-2">
+                  <div className='flex items-center gap-2'>
                     <div className="cursor-grab active:cursor-grabbing text-gray-400">
                         <DragHandleIcon className="w-5 h-5" />
                     </div>
-                    <button onClick={() => onRemoveExperience(exp.id)} className="text-gray-400 hover:text-red-500">
-                        <TrashIcon className="w-5 h-5" />
-                    </button>
-                </div>
+                    <h4 className="font-semibold text-md text-gray-800">{exp.jobTitle || 'New Position'}</h4>
+                  </div>
+                <button onClick={() => onRemoveExperience(exp.id)} className="text-gray-400 hover:text-red-500">
+                  <TrashIcon className="w-5 h-5" />
+                </button>
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <Input label="Job Title" value={exp.jobTitle} onChange={(e) => onUpdateExperience(exp.id, 'jobTitle', e.target.value)} />
                 <Input label="Company" value={exp.company} onChange={(e) => onUpdateExperience(exp.id, 'company', e.target.value)} />
                 <Input label="Location" value={exp.location} onChange={(e) => onUpdateExperience(exp.id, 'location', e.target.value)} />
-                <div className="grid grid-cols-2 gap-4">
+                <div className="flex space-x-2">
                     <Input label="Start Date" type="month" value={exp.startDate} onChange={(e) => onUpdateExperience(exp.id, 'startDate', e.target.value)} />
                     <Input label="End Date" type="month" value={exp.endDate} onChange={(e) => onUpdateExperience(exp.id, 'endDate', e.target.value)} />
                 </div>
+              </div>
+              <div className="mt-4">
                 <Textarea label="Responsibilities" value={exp.responsibilities} onChange={(e) => onUpdateExperience(exp.id, 'responsibilities', e.target.value)} />
+              </div>
             </div>
-          </div>
-        ))}
-        <button onClick={onAddExperience} className="w-full flex items-center justify-center py-2 px-4 border border-dashed border-gray-300 text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50">
-            <PlusIcon className="w-5 h-5 mr-2" /> Add Experience
+          ))}
+        </div>
+        <button onClick={onAddExperience} className="mt-4 flex items-center space-x-2 text-sm font-medium text-indigo-600 hover:text-indigo-800">
+          <PlusIcon className="w-5 h-5" />
+          <span>Add Experience</span>
         </button>
       </Section>
     ),
     education: (
       <Section title="Education">
-        {cvData.education.map((edu, index) => (
-          <div key={edu.id}
-            draggable
-            onDragStart={(e) => eduDragHandlers.onDragStart(e, index)}
-            onDragEnter={(e) => eduDragHandlers.onDragEnter(e, index)}
-            onDrop={eduDragHandlers.onDrop}
-            onDragEnd={eduDragHandlers.onDragEnd}
-            onDragOver={(e) => e.preventDefault()}
-          >
-            <div className="p-4 border rounded-md space-y-4 relative bg-gray-50/50">
-                <div className="absolute top-2 right-2 flex items-center space-x-2">
-                    <div className="cursor-grab active:cursor-grabbing text-gray-400">
-                        <DragHandleIcon className="w-5 h-5" />
-                    </div>
-                    <button onClick={() => onRemoveEducation(edu.id)} className="text-gray-400 hover:text-red-500">
-                      <TrashIcon className="w-5 h-5" />
-                    </button>
+        <div className="space-y-4">
+          {cvData.education.map((edu, index) => (
+             <div key={edu.id} 
+                draggable 
+                onDragStart={(e) => eduDragHandlers.onDragStart(e, index)}
+                onDragEnter={(e) => eduDragHandlers.onDragEnter(e, index)}
+                onDragEnd={eduDragHandlers.onDragEnd}
+                onDrop={eduDragHandlers.onDrop}
+                onDragOver={(e) => e.preventDefault()}
+                className="p-4 border rounded-md bg-gray-50/50"
+             >
+                <div className="flex justify-between items-start mb-2">
+                  <div className='flex items-center gap-2'>
+                      <div className="cursor-grab active:cursor-grabbing text-gray-400">
+                          <DragHandleIcon className="w-5 h-5" />
+                      </div>
+                      <h4 className="font-semibold text-md text-gray-800">{edu.degree || 'New Education'}</h4>
+                  </div>
+                  <button onClick={() => onRemoveEducation(edu.id)} className="text-gray-400 hover:text-red-500">
+                    <TrashIcon className="w-5 h-5" />
+                  </button>
                 </div>
-                <Input label="Degree / Certificate" value={edu.degree} onChange={(e) => onUpdateEducation(edu.id, 'degree', e.target.value)} />
-                <Input label="Institution" value={edu.institution} onChange={(e) => onUpdateEducation(edu.id, 'institution', e.target.value)} />
-                <Input label="Location" value={edu.location} onChange={(e) => onUpdateEducation(edu.id, 'location', e.target.value)} />
-                <div className="grid grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <Input label="Degree / Qualification" value={edu.degree} onChange={(e) => onUpdateEducation(edu.id, 'degree', e.target.value)} />
+                  <Input label="Institution" value={edu.institution} onChange={(e) => onUpdateEducation(edu.id, 'institution', e.target.value)} />
+                  <Input label="Location" value={edu.location} onChange={(e) => onUpdateEducation(edu.id, 'location', e.target.value)} />
+                  <div className="flex space-x-2">
                     <Input label="Start Date" type="month" value={edu.startDate} onChange={(e) => onUpdateEducation(edu.id, 'startDate', e.target.value)} />
                     <Input label="End Date" type="month" value={edu.endDate} onChange={(e) => onUpdateEducation(edu.id, 'endDate', e.target.value)} />
+                   </div>
                 </div>
-                <Input label="Details (e.g., GPA, Honors)" value={edu.details} onChange={(e) => onUpdateEducation(edu.id, 'details', e.target.value)} />
+                <div className="mt-4">
+                    <Input label="Details (e.g., GPA, Honors)" value={edu.details} onChange={(e) => onUpdateEducation(edu.id, 'details', e.target.value)} />
+                </div>
             </div>
-          </div>
-        ))}
-         <button onClick={onAddEducation} className="w-full flex items-center justify-center py-2 px-4 border border-dashed border-gray-300 text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50">
-            <PlusIcon className="w-5 h-5 mr-2" /> Add Education
+          ))}
+        </div>
+        <button onClick={onAddEducation} className="mt-4 flex items-center space-x-2 text-sm font-medium text-indigo-600 hover:text-indigo-800">
+          <PlusIcon className="w-5 h-5" />
+          <span>Add Education</span>
         </button>
       </Section>
     ),
     skills: (
       <Section title="Skills">
-        <Textarea label="List your skills (comma-separated)" value={cvData.skills} onChange={(e) => onSkillsChange(e.target.value)} />
+        <Textarea label="Skills (comma-separated)" value={cvData.skills} onChange={(e) => onSkillsChange(e.target.value)} />
       </Section>
     ),
     projects: (
         <Section title="Projects">
-          {cvData.projects.map((proj, index) => (
-            <div key={proj.id} 
-              draggable
-              onDragStart={(e) => projDragHandlers.onDragStart(e, index)}
-              onDragEnter={(e) => projDragHandlers.onDragEnter(e, index)}
-              onDrop={projDragHandlers.onDrop}
-              onDragEnd={projDragHandlers.onDragEnd}
-              onDragOver={(e) => e.preventDefault()}
-            >
-              <div className="p-4 border rounded-md space-y-4 relative bg-gray-50/50">
-                  <div className="absolute top-2 right-2 flex items-center space-x-2">
-                      <div className="cursor-grab active:cursor-grabbing text-gray-400">
-                          <DragHandleIcon className="w-5 h-5" />
-                      </div>
-                      <button onClick={() => onRemoveProject(proj.id)} className="text-gray-400 hover:text-red-500">
-                          <TrashIcon className="w-5 h-5" />
-                      </button>
-                  </div>
-                  <Input label="Project Name" value={proj.name} onChange={(e) => onUpdateProject(proj.id, 'name', e.target.value)} />
-                  <Input label="Technologies Used (comma-separated)" value={proj.technologies} onChange={(e) => onUpdateProject(proj.id, 'technologies', e.target.value)} />
-                  <Input label="Project Link" value={proj.link} onChange={(e) => onUpdateProject(proj.id, 'link', e.target.value)} />
-                  <Textarea label="Description" value={proj.description} onChange={(e) => onUpdateProject(proj.id, 'description', e.target.value)} />
-              </div>
-            </div>
-          ))}
-          <button onClick={onAddProject} className="w-full flex items-center justify-center py-2 px-4 border border-dashed border-gray-300 text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50">
-              <PlusIcon className="w-5 h-5 mr-2" /> Add Project
-          </button>
-        </Section>
-      ),
-      certifications: (
-        <Section title="Certifications">
-          {cvData.certifications.map((cert, index) => (
-            <div key={cert.id} 
-              draggable
-              onDragStart={(e) => certDragHandlers.onDragStart(e, index)}
-              onDragEnter={(e) => certDragHandlers.onDragEnter(e, index)}
-              onDrop={certDragHandlers.onDrop}
-              onDragEnd={certDragHandlers.onDragEnd}
-              onDragOver={(e) => e.preventDefault()}
-            >
-              <div className="p-4 border rounded-md space-y-4 relative bg-gray-50/50">
-                  <div className="absolute top-2 right-2 flex items-center space-x-2">
-                      <div className="cursor-grab active:cursor-grabbing text-gray-400">
-                          <DragHandleIcon className="w-5 h-5" />
-                      </div>
-                      <button onClick={() => onRemoveCertification(cert.id)} className="text-gray-400 hover:text-red-500">
-                          <TrashIcon className="w-5 h-5" />
-                      </button>
-                  </div>
-                  <Input label="Certification Name" value={cert.name} onChange={(e) => onUpdateCertification(cert.id, 'name', e.target.value)} />
-                  <Input label="Issuing Organization" value={cert.issuingOrganization} onChange={(e) => onUpdateCertification(cert.id, 'issuingOrganization', e.target.value)} />
-                  <Input label="Date Issued" type="month" value={cert.date} onChange={(e) => onUpdateCertification(cert.id, 'date', e.target.value)} />
-              </div>
-            </div>
-          ))}
-          <button onClick={onAddCertification} className="w-full flex items-center justify-center py-2 px-4 border border-dashed border-gray-300 text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50">
-              <PlusIcon className="w-5 h-5 mr-2" /> Add Certification
-          </button>
-        </Section>
-      ),
-    professionalNarrative: (
-      <Section title="Professional Narrative">
-        <Textarea 
-          label="What has made you the professional you are today / Cosa ti ha reso il professionista che sei oggi" 
-          value={cvData.professionalNarrative} 
-          onChange={(e) => onProfessionalNarrativeChange(e.target.value)}
-          rows={6}
-        />
-      </Section>
-    ),
-    video: (
-        <Section title="Video Presentation">
-            <div className='space-y-4'>
-                <p className='text-sm text-gray-600 bg-gray-50 p-3 rounded-md border border-gray-200'>
-                    <strong>Your Video Intro (40s max):</strong> Introduce yourself by briefly covering your main expertise, a key achievement, and your professional passion. You can either record directly or upload an existing video.
-                </p>
-
-                {cvData.videoUrl ? (
-                    <div className='space-y-3'>
-                        <video key={cvData.videoUrl} controls src={cvData.videoUrl} className='w-full rounded-md shadow-inner bg-black'></video>
-                        <button onClick={() => onVideoUrlChange('')} className="w-full flex items-center justify-center py-2 px-4 border border-dashed border-gray-300 text-sm font-medium rounded-md text-red-600 bg-white hover:bg-red-50">
-                            <TrashIcon className="w-5 h-5 mr-2" /> Remove Video
-                        </button>
-                    </div>
-                ) : (
-                    <div className='text-center'>
-                         <input
-                            type="file"
-                            ref={videoInputRef}
-                            onChange={handleVideoUpload}
-                            accept="video/*"
-                            className="hidden"
-                        />
-                        <div className='flex space-x-4'>
-                             <button onClick={() => setIsVideoRecorderOpen(true)} className="w-full flex items-center justify-center py-2 px-4 border border-gray-300 text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50">
-                                <RecordIcon className="w-5 h-5 mr-2" /> Record Video
-                            </button>
-                             <button onClick={() => videoInputRef.current?.click()} className="w-full flex items-center justify-center py-2 px-4 border border-gray-300 text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50">
-                                <VideoPlusIcon className="w-5 h-5 mr-2" /> Upload Video
+            <div className="space-y-4">
+                {cvData.projects.map((proj, index) => (
+                    <div key={proj.id}
+                        draggable
+                        onDragStart={(e) => projDragHandlers.onDragStart(e, index)}
+                        onDragEnter={(e) => projDragHandlers.onDragEnter(e, index)}
+                        onDragEnd={projDragHandlers.onDragEnd}
+                        onDrop={projDragHandlers.onDrop}
+                        onDragOver={(e) => e.preventDefault()}
+                        className="p-4 border rounded-md bg-gray-50/50"
+                    >
+                        <div className="flex justify-between items-start mb-2">
+                            <div className='flex items-center gap-2'>
+                                <div className="cursor-grab active:cursor-grabbing text-gray-400">
+                                    <DragHandleIcon className="w-5 h-5" />
+                                </div>
+                                <h4 className="font-semibold text-md text-gray-800">{proj.name || 'New Project'}</h4>
+                            </div>
+                            <button onClick={() => onRemoveProject(proj.id)} className="text-gray-400 hover:text-red-500">
+                                <TrashIcon className="w-5 h-5" />
                             </button>
                         </div>
-                        {videoError ? (
-                           <p className="text-red-500 text-sm mt-2">{videoError}</p>
-                        ) : (
-                           <p className="text-xs text-gray-500 mt-2">Max 40 seconds.</p>
-                        )}
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <Input label="Project Name" value={proj.name} onChange={(e) => onUpdateProject(proj.id, 'name', e.target.value)} />
+                            <Input label="Technologies Used" value={proj.technologies} onChange={(e) => onUpdateProject(proj.id, 'technologies', e.target.value)} />
+                        </div>
+                         <div className="mt-4">
+                            <Input label="Project Link" value={proj.link} onChange={(e) => onUpdateProject(proj.id, 'link', e.target.value)} />
+                        </div>
+                        <div className="mt-4">
+                            <Textarea label="Description" value={proj.description} onChange={(e) => onUpdateProject(proj.id, 'description', e.target.value)} />
+                        </div>
                     </div>
-                )}
+                ))}
             </div>
+            <button onClick={onAddProject} className="mt-4 flex items-center space-x-2 text-sm font-medium text-indigo-600 hover:text-indigo-800">
+                <PlusIcon className="w-5 h-5" />
+                <span>Add Project</span>
+            </button>
         </Section>
+    ),
+    certifications: (
+        <Section title="Certifications">
+            <div className="space-y-4">
+                {cvData.certifications.map((cert, index) => (
+                    <div key={cert.id}
+                        draggable
+                        onDragStart={(e) => certDragHandlers.onDragStart(e, index)}
+                        onDragEnter={(e) => certDragHandlers.onDragEnter(e, index)}
+                        onDragEnd={certDragHandlers.onDragEnd}
+                        onDrop={certDragHandlers.onDrop}
+                        onDragOver={(e) => e.preventDefault()}
+                        className="p-4 border rounded-md bg-gray-50/50"
+                    >
+                        <div className="flex justify-between items-start mb-2">
+                             <div className='flex items-center gap-2'>
+                                <div className="cursor-grab active:cursor-grabbing text-gray-400">
+                                    <DragHandleIcon className="w-5 h-5" />
+                                </div>
+                                <h4 className="font-semibold text-md text-gray-800">{cert.name || 'New Certification'}</h4>
+                            </div>
+                            <button onClick={() => onRemoveCertification(cert.id)} className="text-gray-400 hover:text-red-500">
+                                <TrashIcon className="w-5 h-5" />
+                            </button>
+                        </div>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <Input label="Certification Name" value={cert.name} onChange={(e) => onUpdateCertification(cert.id, 'name', e.target.value)} />
+                            <Input label="Issuing Organization" value={cert.issuingOrganization} onChange={(e) => onUpdateCertification(cert.id, 'issuingOrganization', e.target.value)} />
+                        </div>
+                         <div className="mt-4">
+                            <Input label="Date" type="month" value={cert.date} onChange={(e) => onUpdateCertification(cert.id, 'date', e.target.value)} />
+                        </div>
+                    </div>
+                ))}
+            </div>
+            <button onClick={onAddCertification} className="mt-4 flex items-center space-x-2 text-sm font-medium text-indigo-600 hover:text-indigo-800">
+                <PlusIcon className="w-5 h-5" />
+                <span>Add Certification</span>
+            </button>
+        </Section>
+    ),
+    professionalNarrative: (
+        <Section title="Professional Narrative">
+            <Textarea 
+                label="What has made you the professional you are today?" 
+                value={cvData.professionalNarrative} 
+                onChange={(e) => onProfessionalNarrativeChange(e.target.value)} 
+                rows={6}
+            />
+        </Section>
+    ),
+    video: (
+      <Section title="Video Presentation">
+        <div className='grid grid-cols-1 md:grid-cols-2 gap-4 items-start'>
+            <div className='space-y-4'>
+                <p className='text-sm text-gray-600'>Add a short video introduction to make your application stand out. You can record a new video, upload a file, or paste a link from services like YouTube or Loom.</p>
+                {/* FIX: The Input component requires a 'label' prop. The separate <label> was incorrect. */}
+                <Input 
+                    label="Video Link"
+                    type="url"
+                    placeholder="e.g., https://www.youtube.com/watch?v=..."
+                    value={videoUrlInput}
+                    onChange={handleVideoUrlInputChange}
+                    onBlur={handleVideoUrlInputBlur}
+                 />
+                 <div className="relative flex items-center">
+                    <div className="flex-grow border-t border-gray-300"></div>
+                    <span className="flex-shrink mx-4 text-gray-500 text-sm">Or</span>
+                    <div className="flex-grow border-t border-gray-300"></div>
+                </div>
+                <div className='flex items-center space-x-3'>
+                    <button onClick={() => setIsVideoRecorderOpen(true)} className="flex-1 flex items-center justify-center space-x-2 px-3 py-2 border border-gray-300 rounded-md text-sm font-medium text-gray-700 hover:bg-gray-50">
+                        <RecordIcon className="w-5 h-5" />
+                        <span>Record Video</span>
+                    </button>
+                    <input type="file" accept="video/*" onChange={handleVideoFileChange} ref={videoInputRef} className="hidden" />
+                    <button onClick={() => videoInputRef.current?.click()} className="flex-1 flex items-center justify-center space-x-2 px-3 py-2 border border-gray-300 rounded-md text-sm font-medium text-gray-700 hover:bg-gray-50">
+                        <VideoPlusIcon className="w-5 h-5" />
+                        <span>Upload File</span>
+                    </button>
+                </div>
+                {videoError && <p className="text-sm text-red-600">{videoError}</p>}
+            </div>
+            <div className='w-full aspect-video bg-gray-100 rounded-md overflow-hidden'>
+                {renderVideoPreview(cvData.videoUrl)}
+            </div>
+        </div>
+      </Section>
+    ),
+    jobSearch: (
+      <Section title="Job Opportunity Finder">
+        <p className="text-sm text-gray-600 mb-4">Launch the job finder to discover relevant opportunities based on your CV and target locations.</p>
+        <button
+            onClick={onOpenJobModal}
+            className="w-full flex items-center justify-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-indigo-600 hover:bg-indigo-700 disabled:bg-indigo-300 disabled:cursor-not-allowed"
+        >
+            <BriefcaseIcon className="w-5 h-5 mr-2" />
+            Launch Job Finder
+        </button>
+      </Section>
     )
   };
 
   return (
-    <>
-    <div className="bg-white p-6 rounded-lg shadow-md sticky top-24">
-      <div className="space-y-8">
-        
-        <details className="group border rounded-md" open>
-            <summary className="flex justify-between items-center p-4 cursor-pointer list-none">
-                <h3 className="text-xl font-semibold text-gray-800">Import & Enhance Existing CV</h3>
-                <div className="group-open:rotate-45 transform transition-transform">
-                    <PlusIcon className="w-6 h-6"/>
-                </div>
-            </summary>
-            <div className="p-4 border-t space-y-4">
-                 <input
-                    type="file"
-                    ref={fileInputRef}
-                    onChange={handleFileChange}
-                    accept=".pdf,.doc,.docx"
-                    className="hidden"
-                 />
-                {!selectedFile ? (
-                    <button 
-                        onClick={() => fileInputRef.current?.click()}
-                        className="w-full flex flex-col items-center justify-center py-8 px-4 border-2 border-dashed border-gray-300 text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50"
+    <div className="space-y-6">
+      <div className="bg-white p-4 rounded-md border space-y-3">
+        <div className="flex items-center space-x-2">
+            <SparklesIcon className="w-6 h-6 text-indigo-600" />
+            <h3 className="text-xl font-semibold text-gray-800">Enhance with AI</h3>
+        </div>
+        <p className="text-sm text-gray-600">Have an existing CV? Upload a PDF, DOCX, or text file, and let AI parse and populate the form for you.</p>
+        <div className="flex flex-col sm:flex-row sm:items-center sm:space-x-3 space-y-2 sm:space-y-0">
+             <div className="flex-1">
+                <label htmlFor="file-upload" className="sr-only">Choose file</label>
+                <div className="flex rounded-md shadow-sm">
+                    <div 
+                        onClick={() => fileInputRef.current?.click()} 
+                        className="px-3 inline-flex items-center border border-r-0 border-gray-300 bg-gray-50 text-gray-500 text-sm rounded-l-md cursor-pointer hover:bg-gray-100"
                     >
-                        <UploadIcon className="w-8 h-8 text-gray-400 mb-2"/>
-                        <span>Click to upload a file</span>
-                        <span className="text-xs text-gray-500">PDF or DOCX</span>
-                    </button>
-                 ) : (
-                    <div className="flex items-center justify-between p-3 border rounded-md bg-gray-50">
-                        <div className="flex items-center space-x-2 overflow-hidden">
-                            <FileIcon className="w-6 h-6 text-gray-500 flex-shrink-0" />
-                            <span className="text-sm font-medium text-gray-800 truncate">{selectedFile.name}</span>
-                        </div>
-                        <button onClick={() => setSelectedFile(null)} className="text-gray-500 hover:text-red-600">
-                           <XCircleIcon className="w-6 h-6"/>
-                        </button>
+                        <UploadIcon className="w-5 h-5 mr-2" />
+                        Browse
                     </div>
-                 )}
-                
-                <button
-                    onClick={handleEnhanceClick}
-                    disabled={isEnhancing || !selectedFile}
-                    className="w-full flex items-center justify-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-teal-600 hover:bg-teal-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-teal-500 disabled:bg-gray-400 disabled:cursor-not-allowed"
-                >
-                     {isEnhancing ? (
-                        <>
-                            <svg className="animate-spin -ml-1 mr-3 h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                            </svg>
-                            Generating Preview...
-                        </>
-                    ) : (
-                        <>
-                            <SparklesIcon className="w-5 h-5 mr-2" />
-                            Enhance with AI
-                        </>
-                    )}
-                </button>
+                    <div className="relative flex-1">
+                        <input type="file" ref={fileInputRef} onChange={handleFileChange} accept=".pdf,.doc,.docx,.txt" className="sr-only" id="file-upload" />
+                        <div className="block w-full px-3 py-2 border border-gray-300 rounded-r-md text-sm text-gray-700 truncate">
+                            {selectedFile ? (
+                                <span className='flex items-center'>
+                                    <FileIcon className='w-4 h-4 mr-2 text-gray-500' />
+                                    {selectedFile.name}
+                                </span>
+                            ) : "No file selected"}
+                        </div>
+                         {selectedFile && (
+                            <button onClick={() => { setSelectedFile(null); if(fileInputRef.current) fileInputRef.current.value = ''; }} className="absolute inset-y-0 right-0 flex items-center pr-3">
+                                <XCircleIcon className="h-5 w-5 text-gray-400 hover:text-gray-600" />
+                            </button>
+                        )}
+                    </div>
+                </div>
             </div>
-        </details>
-        
-        {sections.map((sectionId, index) => (
-          <div
-            key={sectionId}
-            draggable
-            onDragStart={(e) => handleSectionDragStart(e, index)}
-            onDragEnter={(e) => handleSectionDragEnter(e, index)}
-            onDragEnd={handleSectionDragEnd}
-            onDrop={handleSectionDrop}
-            onDragOver={(e) => e.preventDefault()}
-            className={`transition-opacity ${isSectionDragging && sectionDragItem.current === index ? 'opacity-40' : 'opacity-100'}`}
-          >
-            {sectionComponents[sectionId]}
-          </div>
-        ))}
+            <button
+                onClick={handleEnhanceClick}
+                disabled={!selectedFile || isEnhancing}
+                className="flex items-center justify-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-indigo-600 hover:bg-indigo-700 disabled:bg-indigo-300 disabled:cursor-not-allowed"
+            >
+                {isEnhancing ? (
+                    <>
+                        <svg className="animate-spin -ml-1 mr-3 h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>
+                        Enhancing...
+                    </>
+                ) : "Enhance"}
+            </button>
+        </div>
       </div>
-    </div>
-    <VideoRecorderModal 
-        isOpen={isVideoRecorderOpen} 
+
+      {sections.map((sectionId, index) => (
+        <div
+          key={sectionId}
+          draggable
+          onDragStart={(e) => handleSectionDragStart(e, index)}
+          onDragEnter={(e) => handleSectionDragEnter(e, index)}
+          onDragEnd={handleSectionDragEnd}
+          onDrop={handleSectionDrop}
+          onDragOver={(e) => e.preventDefault()}
+          className={`transition-opacity ${isSectionDragging && sectionDragItem.current === index ? 'opacity-30' : 'opacity-100'}`}
+        >
+          {sectionsMap[sectionId]}
+        </div>
+      ))}
+      <VideoRecorderModal
+        isOpen={isVideoRecorderOpen}
         onClose={() => setIsVideoRecorderOpen(false)}
-        onSave={handleSaveRecordedVideo}
+        onSave={handleVideoSave}
         cvData={cvData}
         language={language}
-    />
-    </>
+      />
+    </div>
   );
 };
