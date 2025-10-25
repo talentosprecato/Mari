@@ -1,6 +1,6 @@
-
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import { TemplateSelector } from './TemplateSelector';
+import { DownloadIcon } from './icons';
 
 // This is a global function from the 'marked' library loaded in index.html
 declare global {
@@ -8,6 +8,8 @@ declare global {
         marked: {
             parse(markdown: string): string;
         };
+        jspdf: any;
+        html2canvas: any;
     }
 }
 
@@ -56,6 +58,8 @@ const Placeholder = () => (
 
 export const CVPreview: React.FC<CVPreviewProps> = ({ markdownContent, isLoading, error, selectedTemplate, onTemplateChange }) => {
   const [htmlContent, setHtmlContent] = useState('');
+  const [isExporting, setIsExporting] = useState(false);
+  const previewRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (markdownContent) {
@@ -66,6 +70,51 @@ export const CVPreview: React.FC<CVPreviewProps> = ({ markdownContent, isLoading
     }
   }, [markdownContent]);
 
+  const handleExportPDF = async () => {
+    if (!previewRef.current || !markdownContent) return;
+
+    setIsExporting(true);
+    try {
+        const { jsPDF } = window.jspdf;
+        const canvas = await window.html2canvas(previewRef.current, {
+            scale: 2, // Higher scale for better quality
+        });
+        const imgData = canvas.toDataURL('image/png');
+        
+        const pdf = new jsPDF({
+            orientation: 'portrait',
+            unit: 'mm',
+            format: 'a4',
+        });
+        
+        const pdfWidth = pdf.internal.pageSize.getWidth();
+        const imgProps = pdf.getImageProperties(imgData);
+        const pdfHeight = (imgProps.height * pdfWidth) / imgProps.width;
+        
+        let heightLeft = pdfHeight;
+        let position = 0;
+
+        pdf.addImage(imgData, 'PNG', 0, position, pdfWidth, pdfHeight);
+        heightLeft -= pdf.internal.pageSize.getHeight();
+
+        while (heightLeft > 0) {
+            position -= pdf.internal.pageSize.getHeight();
+            pdf.addPage();
+            pdf.addImage(imgData, 'PNG', 0, position, pdfWidth, pdfHeight);
+            heightLeft -= pdf.internal.pageSize.getHeight();
+        }
+        
+        pdf.save('cv.pdf');
+
+    } catch (err) {
+        console.error("Failed to export PDF", err);
+        alert("Sorry, there was an error exporting the PDF. Please try again.");
+    } finally {
+        setIsExporting(false);
+    }
+  };
+
+
   const renderContent = () => {
     if(isLoading) return <LoadingSkeleton />;
     if(error) return <div className="text-center text-red-600 bg-red-50 p-4 rounded-md">{error}</div>;
@@ -73,6 +122,7 @@ export const CVPreview: React.FC<CVPreviewProps> = ({ markdownContent, isLoading
 
     return (
         <div
+          ref={previewRef}
           className="prose prose-indigo max-w-none"
           dangerouslySetInnerHTML={{ __html: htmlContent }}
         />
@@ -81,7 +131,16 @@ export const CVPreview: React.FC<CVPreviewProps> = ({ markdownContent, isLoading
 
   return (
     <div className="bg-white p-6 sm:p-8 rounded-lg shadow-md sticky top-24">
-        <h2 className="text-2xl font-bold text-gray-900 mb-6 border-b pb-3">CV Preview</h2>
+        <div className="flex justify-between items-center mb-6 border-b pb-3">
+            <h2 className="text-2xl font-bold text-gray-900">CV Preview</h2>
+            <button
+                onClick={handleExportPDF}
+                disabled={!markdownContent || isLoading || isExporting}
+                className="flex items-center justify-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 disabled:bg-gray-400 disabled:cursor-not-allowed"
+            >
+                {isExporting ? 'Exporting...' : <><DownloadIcon className="w-5 h-5 mr-2" /> Export PDF</>}
+            </button>
+        </div>
         
         <TemplateSelector 
             selectedTemplate={selectedTemplate}

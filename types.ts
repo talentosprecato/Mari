@@ -28,9 +28,36 @@ export interface Education {
   details: string;
 }
 
+export interface Project {
+  id: string;
+  name: string;
+  technologies: string;
+  link: string;
+  description: string;
+}
+
+export interface Certification {
+  id: string;
+  name: string;
+  issuingOrganization: string;
+  date: string;
+}
+
 export interface CVData {
   personal: PersonalDetails;
   experience: Experience[];
   education: Education[];
   skills: string;
+  projects: Project[];
+  certifications: Certification[];
+  professionalNarrative: string;
+}
+
+export type SectionId = 'personal' | 'experience' | 'education' | 'skills' | 'projects' | 'certifications' | 'professionalNarrative';
+
+export type CVDataFromAI = Omit<CVData, 'experience' | 'education' | 'projects' | 'certifications'> & {
+    experience: Omit<Experience, 'id'>[];
+    education: Omit<Education, 'id'>[];
+    projects: Omit<Project, 'id'>[];
+    certifications: Omit<Certification, 'id'>[];
 }
