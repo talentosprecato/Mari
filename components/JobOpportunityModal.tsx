@@ -1,3 +1,4 @@
+
 import React, { useState } from 'react';
 import { CVData, JobSuggestion } from '../types.ts';
 import { findJobOpportunities, draftCoverLetter } from '../services/geminiService.ts';
@@ -64,7 +65,11 @@ export const JobOpportunityModal: React.FC<JobOpportunityModalProps> = ({ isOpen
             setResults(opportunities);
         } catch (e) {
             console.error(e);
-            setError(e instanceof Error ? e.message : 'An unknown error occurred.');
+            if (e instanceof Error && e.message.includes("API key")) {
+                setError('AI service is not available. Please check API key configuration.');
+            } else {
+                setError('An error occurred while searching. Please try again.');
+            }
         } finally {
             setIsLoading(false);
         }

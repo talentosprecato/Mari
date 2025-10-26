@@ -104,6 +104,7 @@ export const VideoRecorderModal: React.FC<VideoRecorderModalProps> = ({ isOpen, 
   const [script, setScript] = useState<string | null>(null);
   const [isGeneratingScript, setIsGeneratingScript] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [scriptError, setScriptError] = useState<string | null>(null);
   const [scrollSpeed, setScrollSpeed] = useState(1);
   const [activeTab, setActiveTab] = useState<'filters' | 'overlays'>('filters');
   const [isSubtitlesEnabled, setIsSubtitlesEnabled] = useState(true);
@@ -317,6 +318,7 @@ export const VideoRecorderModal: React.FC<VideoRecorderModalProps> = ({ isOpen, 
     setSelectedFilter('none');
     setSelectedOverlay('none');
     setError(null);
+    setScriptError(null);
     stopScroll();
     setPermissionsGranted(false);
   }, [stopMedia, stopScroll]);
@@ -420,12 +422,17 @@ export const VideoRecorderModal: React.FC<VideoRecorderModalProps> = ({ isOpen, 
 
   const handleGenerateScript = async () => {
     setIsGeneratingScript(true);
+    setScriptError(null);
     try {
       const generatedScript = await generateVideoScript(cvData, language);
       setScript(generatedScript);
     } catch (e) {
       console.error(e);
-      alert("Failed to generate script. Please try again.");
+      if (e instanceof Error && e.message.includes("API key")) {
+          setScriptError('AI service is not available. Please check API key configuration.');
+      } else {
+          setScriptError("Failed to generate script. Please try again.");
+      }
     } finally {
       setIsGeneratingScript(false);
     }
@@ -611,6 +618,7 @@ export const VideoRecorderModal: React.FC<VideoRecorderModalProps> = ({ isOpen, 
                             </button>
                         </div>
                     </div>
+                    {scriptError && <p className="text-xs text-red-600 text-center pt-2">{scriptError}</p>}
                 </div>
             </div>
         </div>

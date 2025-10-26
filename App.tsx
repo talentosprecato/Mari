@@ -171,7 +171,11 @@ const App: React.FC = () => {
         setShowEnhancePreviewModal(true);
 
     } catch (e) {
-        setError('Failed to parse and enhance CV. The AI could not understand the format. Please try again with a different file.');
+        if (e instanceof Error && e.message.includes("API key")) {
+            setError('Failed to enhance CV. Please check your API key configuration.');
+        } else {
+            setError('Failed to parse and enhance CV. The AI could not understand the format or the file may be corrupt. Please try again.');
+        }
         console.error(e);
     } finally {
         setIsEnhancing(false);

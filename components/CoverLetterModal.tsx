@@ -1,3 +1,4 @@
+
 import React, { useState } from 'react';
 import { CVData } from '../types.ts';
 import { draftCoverLetter } from '../services/geminiService.ts';
@@ -59,7 +60,11 @@ export const CoverLetterModal: React.FC<CoverLetterModalProps> = ({ isOpen, onCl
             setDraft(coverLetter);
         } catch (e) {
             console.error(e);
-            setError(e instanceof Error ? e.message : 'An unknown error occurred while drafting the letter.');
+            if (e instanceof Error && e.message.includes("API key")) {
+                setError('AI service is not available. Please check API key configuration.');
+            } else {
+                setError('An error occurred while drafting the letter. Please try again.');
+            }
         } finally {
             setIsLoading(false);
         }

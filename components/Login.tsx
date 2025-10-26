@@ -14,7 +14,9 @@ const Login: React.FC = () => {
 
     const handleAuthError = (err: any) => {
         setLoading(false);
-        if (err.code) {
+        if (err.message && err.message.includes('Firebase configuration is missing')) {
+            setError('Authentication is not available at this time. Please contact support.');
+        } else if (err.code) {
             const friendlyMessage = err.code.replace('auth/', '').replace(/-/g, ' ');
             setError(friendlyMessage.charAt(0).toUpperCase() + friendlyMessage.slice(1) + '.');
         } else {
