@@ -3,6 +3,7 @@
 import React, { useState } from 'react';
 import { signInWithGoogle, signInWithFacebook, signUpWithEmail, logInWithEmail } from '../services/authService.ts';
 import { GoogleIcon, FacebookIcon, SparklesIcon, MailIcon } from './icons.tsx';
+import { getAuth, fetchSignInMethodsForEmail, GoogleAuthProvider } from 'firebase/auth';
 
 const Login: React.FC = () => {
     const [email, setEmail] = useState('');
@@ -45,8 +46,30 @@ const Login: React.FC = () => {
             } else {
                 await signInWithFacebook();
             }
-        } catch (err) {
-            handleAuthError(err);
+        } catch (err: any) {
+            if (err.code === 'auth/account-exists-with-different-credential') {
+                const email = err.customData.email;
+                const auth = getAuth();
+                fetchSignInMethodsForEmail(auth, email)
+                    .then((methods) => {
+                        if (methods.includes(GoogleAuthProvider.PROVIDER_ID)) {
+                            setError("This email is already associated with a Google account. Please sign in with Google.");
+                        } else if (methods.includes('password')) {
+                            setError("This email is already registered. Please sign in using your email and password.");
+                        } else {
+                            setError("An account with this email already exists. Please use your original login method.");
+                        }
+                    })
+                    .catch(() => {
+                        // Fallback to the generic handler if fetching methods fails
+                        handleAuthError(err);
+                    })
+                    .finally(() => {
+                        setLoading(false);
+                    });
+            } else {
+                handleAuthError(err);
+            }
         }
     };
 

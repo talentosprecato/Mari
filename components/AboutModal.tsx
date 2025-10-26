@@ -29,7 +29,7 @@ export const AboutModal: React.FC<AboutModalProps> = ({ isOpen, onClose }) => {
       <div className="bg-stone-50 rounded-lg shadow-xl w-full max-w-2xl max-h-[90vh] flex flex-col transform transition-all duration-300 scale-95 opacity-0 animate-fade-in-scale overflow-hidden">
         <header className="p-4 border-b border-stone-200/80 flex justify-between items-center bg-white/60 backdrop-blur-sm flex-shrink-0">
           <div>
-            <h2 className="text-xl font-bold font-lora text-stone-800">About Veravox AI CV Editor for you</h2>
+            <h2 className="text-xl font-bold font-lora text-stone-800">About Veravox AI CV Editor for us</h2>
             <p className="text-sm text-stone-600">Craft your professional story with the power of Gemini.</p>
           </div>
           <button onClick={onClose} className="text-stone-400 hover:text-stone-600 p-1 rounded-full text-2xl leading-none">&times;</button>

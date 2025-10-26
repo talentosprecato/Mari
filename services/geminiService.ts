@@ -3,13 +3,25 @@
 import { GoogleGenAI, Type, LiveServerMessage } from "@google/genai";
 import { CVData, CVDataFromAI, SectionId, JobSuggestion } from "../types.ts";
 
+let ai: GoogleGenAI | null = null;
 const API_KEY = process.env.API_KEY;
 
-if (!API_KEY) {
-  throw new Error("API_KEY environment variable not set");
+if (API_KEY) {
+  ai = new GoogleGenAI({ apiKey: API_KEY });
+} else {
+  // Log an error to the console for developers. The UI will handle user feedback.
+  console.error("API_KEY environment variable not set. AI features will be disabled.");
 }
 
-const ai = new GoogleGenAI({ apiKey: API_KEY });
+// Helper function to ensure ai is initialized before use.
+// This will be caught by the try/catch blocks in the UI components.
+const getAiInstance = (): GoogleGenAI => {
+    if (!ai) {
+        throw new Error("AI service is not configured. Please ensure the API key is set correctly.");
+    }
+    return ai;
+};
+
 
 const templatePrompts: Record<string, string> = {
   modern: `
@@ -213,7 +225,7 @@ export const generateCV = async (
     language: string,
     photoAlignment: 'left' | 'right' | 'none'
 ): Promise<AsyncGenerator<string>> => {
-    
+    const localAi = getAiInstance();
     const templateInstruction = templatePrompts[templateId] || templatePrompts.modern;
     const languageInstruction = languagePrompts[language] || languagePrompts.en;
 
@@ -247,7 +259,7 @@ export const generateCV = async (
         ${JSON.stringify(cvData, null, 2)}
     `;
 
-    const response = await ai.models.generateContentStream({
+    const response = await localAi.models.generateContentStream({
         model: "gemini-2.5-flash",
         contents: [{
             parts: [{ text: contents }]
@@ -265,11 +277,12 @@ export const generateCV = async (
 };
 
 export const parseAndEnhanceCVFromFile = async (file: File, language: string): Promise<CVDataFromAI> => {
+    const localAi = getAiInstance();
     const filePart = await fileToGenerativePart(file);
 
     const languageInstruction = languagePrompts[language] || languagePrompts.en;
 
-    const response = await ai.models.generateContent({
+    const response = await localAi.models.generateContent({
         model: "gemini-2.5-flash",
         contents: [{
             parts: [
@@ -313,9 +326,10 @@ export const parseAndEnhanceCVFromFile = async (file: File, language: string): P
 
 
 export const generateVideoScript = async (cvData: CVData, language: string): Promise<string> => {
+    const localAi = getAiInstance();
     const languageInstruction = languagePrompts[language] || languagePrompts.en;
     
-    const response = await ai.models.generateContent({
+    const response = await localAi.models.generateContent({
         model: "gemini-2.5-flash",
         contents: `Based on the following CV data, write a short and compelling script (around 60 seconds of speaking time) for a video presentation. The script should be a professional and engaging "elevator pitch".
         
@@ -338,9 +352,10 @@ export const startLiveTranscriptionSession = async (
     onError: (e: Event) => void,
     language: string
 ) => {
+    const localAi = getAiInstance();
     const languageCode = language.split('-')[0]; // Use base language code for BCP-47
     
-    return ai.live.connect({
+    return localAi.live.connect({
         model: 'gemini-2.5-flash-native-audio-preview-09-2025',
         callbacks: {
             onopen: () => console.debug('Live session opened'),
@@ -379,9 +394,10 @@ const jobSuggestionsSchema = {
 };
 
 export const findJobOpportunities = async (cvData: CVData, cities: string, language: string): Promise<JobSuggestion[]> => {
+    const localAi = getAiInstance();
     const languageInstruction = languagePrompts[language] || languagePrompts.en;
 
-    const response = await ai.models.generateContent({
+    const response = await localAi.models.generateContent({
         model: "gemini-2.5-flash",
         contents: `Based on the provided CV, identify 3-5 relevant job titles. For each job title, find 2-3 companies that are likely hiring for such a role in the specified cities. Provide the company name and a direct link to their careers/jobs page.
 
@@ -401,9 +417,10 @@ export const findJobOpportunities = async (cvData: CVData, cities: string, langu
 };
 
 export const draftCoverLetter = async (cvData: CVData, jobTitle: string, companyName: string, language: string): Promise<string> => {
+    const localAi = getAiInstance();
     const languageInstruction = languagePrompts[language] || languagePrompts.en;
 
-    const response = await ai.models.generateContent({
+    const response = await localAi.models.generateContent({
         model: "gemini-2.5-pro",
         contents: `Based on the provided CV, draft a professional and compelling cover letter for the position of **${jobTitle}** at **${companyName}**.
 

@@ -218,7 +218,7 @@ const App: React.FC = () => {
           <div className="flex justify-between items-center py-4">
             <div className="flex items-center space-x-3">
                 <SparklesIcon className="w-8 h-8 text-indigo-600" />
-                <h1 className="text-2xl font-bold text-stone-900 tracking-tight">Veravox AI CV Editor for you</h1>
+                <h1 className="text-2xl font-bold text-stone-900 tracking-tight">Veravox AI CV Editor for us</h1>
                 <SaveStatusIndicator status={saveStatus} />
             </div>
             <div className="flex items-center space-x-4">
