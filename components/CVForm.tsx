@@ -55,13 +55,20 @@ const Section: React.FC<{ title: string; children: React.ReactNode }> = ({ title
   </div>
 );
 
-const Input: React.FC<React.InputHTMLAttributes<HTMLInputElement> & { label: string }> = ({ label, ...props }) => (
+const Input: React.FC<React.InputHTMLAttributes<HTMLInputElement> & { label: string; icon?: React.ReactNode }> = ({ label, icon, ...props }) => (
   <div>
     <label className="block text-sm font-medium text-stone-700 mb-1">{label}</label>
-    <input
-      {...props}
-      className="w-full px-3 py-2 border border-stone-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm bg-white/50"
-    />
+    <div className="relative rounded-md shadow-sm">
+        {icon && (
+            <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3">
+                {icon}
+            </div>
+        )}
+        <input
+            {...props}
+            className={`w-full px-3 py-2 border border-stone-300 rounded-md focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm bg-white/50 ${icon ? 'pl-10' : ''}`}
+        />
+    </div>
   </div>
 );
 
@@ -383,7 +390,13 @@ export const CVForm: React.FC<CVFormProps> = ({
       <Section title="Personal Details">
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <Input label="Full Name" value={cvData.personal.fullName} onChange={(e) => onPersonalChange('fullName', e.target.value)} />
-            <Input label="Email" type="email" value={cvData.personal.email} onChange={(e) => onPersonalChange('email', e.target.value)} />
+            <Input 
+                label="Email" 
+                type="email" 
+                value={cvData.personal.email} 
+                onChange={(e) => onPersonalChange('email', e.target.value)} 
+                icon={<MailIcon className="h-5 w-5 text-stone-400" />}
+            />
             <Input label="Phone" type="tel" value={cvData.personal.phone} onChange={(e) => onPersonalChange('phone', e.target.value)} />
             <Input label="Residence" value={cvData.personal.residence} onChange={(e) => onPersonalChange('residence', e.target.value)} />
             <Input label="Date of Birth" type="date" value={cvData.personal.dateOfBirth} onChange={(e) => onPersonalChange('dateOfBirth', e.target.value)} />

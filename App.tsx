@@ -1,15 +1,19 @@
-import React, { useState, useCallback } from 'react';
+
+import React, { useState, useCallback, useEffect } from 'react';
 import { CVForm } from './components/CVForm';
 import { CVPreview } from './components/CVPreview';
 import { useCVData } from './hooks/useCVData';
 import { generateCV, parseAndEnhanceCVFromFile } from './services/geminiService';
 import { CVData, SectionId } from './types';
-import { GithubIcon, SparklesIcon, CheckCircleIcon, XCircleIcon, InfoIcon, CoffeeIcon } from './components/icons';
+import { GithubIcon, SparklesIcon, CheckCircleIcon, XCircleIcon, InfoIcon, CoffeeIcon, LogoutIcon } from './components/icons';
 import { EnhancePreviewModal } from './components/EnhancePreviewModal';
 import { LanguageSelector } from './components/LanguageSelector';
 import { JobOpportunityModal } from './components/JobOpportunityModal';
 import { AboutModal } from './components/AboutModal';
 import { CoverLetterModal } from './components/CoverLetterModal';
+import { onAuthChange, logout } from './services/authService';
+import type { User } from 'firebase/auth';
+import Login from './components/Login';
 
 const SaveStatusIndicator: React.FC<{ status: 'idle' | 'saving' | 'saved' | 'error' }> = ({ status }) => {
     const visible = status !== 'idle';
@@ -101,6 +105,17 @@ const App: React.FC = () => {
   const [isCoverLetterModalOpen, setIsCoverLetterModalOpen] = useState(false);
   const [isAboutModalOpen, setIsAboutModalOpen] = useState(false);
 
+  const [user, setUser] = useState<User | null>(null);
+  const [authLoading, setAuthLoading] = useState(true);
+
+  useEffect(() => {
+    const unsubscribe = onAuthChange((user) => {
+        setUser(user);
+        setAuthLoading(false);
+    });
+    return () => unsubscribe(); // Cleanup subscription on component unmount
+  }, []);
+
 
   const handleGenerateCV = useCallback(async () => {
     setIsLoading(true);
@@ -108,7 +123,8 @@ const App: React.FC = () => {
     setGeneratedMd('');
     try {
       const sectionsForAI = sections.filter(s => s !== 'portfolio' && s !== 'jobSearch' && s !== 'signature' && s !== 'coverLetter');
-      const stream = generateCV(cvData as CVData, selectedTemplate, sectionsForAI, language, photoAlignment);
+      // FIX: Await the promise that resolves to an async generator before iterating.
+      const stream = await generateCV(cvData as CVData, selectedTemplate, sectionsForAI, language, photoAlignment);
       let fullCv = '';
       for await (const chunk of stream) {
         fullCv += chunk;
@@ -143,7 +159,8 @@ const App: React.FC = () => {
 
         // FIX: Explicitly type the array as SectionId[] to match the function signature.
         const sectionsForPreview: SectionId[] = ['personal', 'experience', 'education', 'skills', 'projects', 'certifications', 'professionalNarrative'];
-        const stream = generateCV(processedData, 'modern', sectionsForPreview, language, 'right');
+        // FIX: Await the promise that resolves to an async generator before iterating.
+        const stream = await generateCV(processedData, 'modern', sectionsForPreview, language, 'right');
         
         let markdownPreview = '';
         for await (const chunk of stream) {
@@ -176,6 +193,23 @@ const App: React.FC = () => {
     setEnhancedPreviewMd('');
   };
 
+  if (authLoading) {
+    return (
+        <div className="min-h-screen flex items-center justify-center bg-stone-50">
+            <div className="flex flex-col items-center justify-center space-y-2 text-stone-500">
+                <svg className="animate-spin h-8 w-8" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                </svg>
+                <span>Loading...</span>
+            </div>
+        </div>
+    );
+  }
+
+  if (!user) {
+    return <Login />;
+  }
 
   return (
     <div className="min-h-screen text-stone-800 font-sans flex flex-col">
@@ -188,6 +222,10 @@ const App: React.FC = () => {
                 <SaveStatusIndicator status={saveStatus} />
             </div>
             <div className="flex items-center space-x-4">
+                <a href="https://paypal.me/indennitate" target="_blank" rel="noopener noreferrer" className="text-stone-500 hover:text-indigo-600 font-medium text-sm flex items-center space-x-1.5 transition-colors">
+                  <CoffeeIcon className="w-5 h-5" />
+                  <span>Support</span>
+                </a>
                 <LanguageSelector selectedLanguage={language} onLanguageChange={setLanguage} />
                  <button onClick={() => setIsAboutModalOpen(true)} className="text-stone-500 hover:text-stone-900" aria-label="About this app">
                     <InfoIcon className="w-7 h-7" />
@@ -195,6 +233,12 @@ const App: React.FC = () => {
                 <a href="https://github.com/google/generative-ai-docs/tree/main/site/en/gemini-api/docs/applications/web" target="_blank" rel="noopener noreferrer" className="text-stone-500 hover:text-stone-900">
                     <GithubIcon className="w-7 h-7" />
                 </a>
+                <div className="border-l border-stone-300 pl-4 flex items-center space-x-3">
+                    <span className="text-sm text-stone-600 hidden sm:block">{user.email}</span>
+                    <button onClick={logout} className="text-stone-500 hover:text-stone-900" aria-label="Logout">
+                        <LogoutIcon className="w-7 h-7" />
+                    </button>
+                </div>
             </div>
           </div>
         </div>
