@@ -1,15 +1,15 @@
-
-
 import React, { useState, useCallback } from 'react';
 import { CVForm } from './components/CVForm';
 import { CVPreview } from './components/CVPreview';
 import { useCVData } from './hooks/useCVData';
 import { generateCV, parseAndEnhanceCVFromFile } from './services/geminiService';
 import { CVData, SectionId } from './types';
-import { GithubIcon, SparklesIcon, CheckCircleIcon, XCircleIcon } from './components/icons';
+import { GithubIcon, SparklesIcon, CheckCircleIcon, XCircleIcon, InfoIcon, CoffeeIcon } from './components/icons';
 import { EnhancePreviewModal } from './components/EnhancePreviewModal';
 import { LanguageSelector } from './components/LanguageSelector';
 import { JobOpportunityModal } from './components/JobOpportunityModal';
+import { AboutModal } from './components/AboutModal';
+import { CoverLetterModal } from './components/CoverLetterModal';
 
 const SaveStatusIndicator: React.FC<{ status: 'idle' | 'saving' | 'saved' | 'error' }> = ({ status }) => {
     const visible = status !== 'idle';
@@ -25,7 +25,7 @@ const SaveStatusIndicator: React.FC<{ status: 'idle' | 'saving' | 'saved' | 'err
         saving: {
             icon: <svg className="animate-spin h-4 w-4 text-gray-500" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>,
             text: 'Saving...',
-            className: 'text-gray-500',
+            className: 'text-stone-500',
         },
         saved: placeholderConfig,
         error: {
@@ -45,9 +45,6 @@ const SaveStatusIndicator: React.FC<{ status: 'idle' | 'saving' | 'saved' | 'err
     );
 };
 
-const brandAvatar = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAABQAAAAODAQMAAADs1/DMAAAABlBMVEVHcEz///+flKJDAAAAAXNSR0IArs4c6QAAAARnQU1BAACxjwv8YQUAAAAJcEhZcwAADsMAAA7DAcdvqGQAAAA0SURBVDiN7cExAQAAAMKg9U9tCU+gAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAH4MWXwAAb6G/CsAAAAASUVORK5CYII=";
-
-
 const App: React.FC = () => {
   const { 
     cvData, 
@@ -55,6 +52,10 @@ const App: React.FC = () => {
     loadCVData, 
     updatePersonal, 
     updatePhoto,
+    addSocialLink,
+    updateSocialLink,
+    removeSocialLink,
+    reorderSocialLinks,
     addExperience, 
     updateExperience, 
     removeExperience, 
@@ -72,15 +73,24 @@ const App: React.FC = () => {
     updateCertification,
     removeCertification,
     reorderCertification,
+    addPortfolioItem,
+    updatePortfolioItem,
+    removePortfolioItem,
+    reorderPortfolioItem,
     updateProfessionalNarrative,
-    updateVideoUrl
+    updateVideoUrl,
+    updateSignature,
   } = useCVData();
   const [generatedMd, setGeneratedMd] = useState<string>('');
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
   const [selectedTemplate, setSelectedTemplate] = useState<string>('modern');
   const [photoAlignment, setPhotoAlignment] = useState<'left' | 'right' | 'none'>('right');
-  const [sections, setSections] = useState<SectionId[]>(['personal', 'experience', 'education', 'skills', 'projects', 'certifications', 'video', 'professionalNarrative', 'jobSearch']);
+  const [photoSize, setPhotoSize] = useState<'small' | 'medium' | 'large'>('medium');
+  const [videoAlignment, setVideoAlignment] = useState<'left' | 'right' | 'center' | 'full'>('full');
+  const [videoSize, setVideoSize] = useState<'small' | 'medium' | 'large'>('medium');
+  const [fontPair, setFontPair] = useState<string>('inter-lora');
+  const [sections, setSections] = useState<SectionId[]>(['personal', 'experience', 'education', 'skills', 'projects', 'portfolio', 'certifications', 'professionalNarrative', 'signature', 'coverLetter', 'jobSearch']);
   const [language, setLanguage] = useState('en');
   
   const [isEnhancing, setIsEnhancing] = useState(false);
@@ -88,14 +98,22 @@ const App: React.FC = () => {
   const [pendingEnhancedData, setPendingEnhancedData] = useState<CVData | null>(null);
   const [enhancedPreviewMd, setEnhancedPreviewMd] = useState('');
   const [isJobModalOpen, setIsJobModalOpen] = useState(false);
+  const [isCoverLetterModalOpen, setIsCoverLetterModalOpen] = useState(false);
+  const [isAboutModalOpen, setIsAboutModalOpen] = useState(false);
 
 
   const handleGenerateCV = useCallback(async () => {
     setIsLoading(true);
     setError(null);
+    setGeneratedMd('');
     try {
-      const markdown = await generateCV(cvData as CVData, selectedTemplate, sections, language, photoAlignment);
-      setGeneratedMd(markdown);
+      const sectionsForAI = sections.filter(s => s !== 'portfolio' && s !== 'jobSearch' && s !== 'signature' && s !== 'coverLetter');
+      const stream = generateCV(cvData as CVData, selectedTemplate, sectionsForAI, language, photoAlignment);
+      let fullCv = '';
+      for await (const chunk of stream) {
+        fullCv += chunk;
+      }
+      setGeneratedMd(fullCv);
     } catch (e) {
       setError('Failed to generate CV. Please check your API key and try again.');
       console.error(e);
@@ -112,16 +130,26 @@ const App: React.FC = () => {
         const result = await parseAndEnhanceCVFromFile(file, language);
         const processedData: CVData = {
             ...result,
-            personal: { ...result.personal, photo: result.personal.photo || '' },
+            personal: { ...result.personal, photo: result.personal.photo || '', socialLinks: result.personal.socialLinks || [] },
             experience: result.experience.map(exp => ({ ...exp, id: crypto.randomUUID() })),
             education: result.education.map(edu => ({ ...edu, id: crypto.randomUUID() })),
             projects: result.projects.map(proj => ({...proj, id: crypto.randomUUID()})),
             certifications: result.certifications.map(cert => ({...cert, id: crypto.randomUUID()})),
+            portfolio: result.portfolio.map(item => ({...item, id: crypto.randomUUID()})),
             videoUrl: result.videoUrl || '',
+            signature: '',
         };
         setPendingEnhancedData(processedData);
 
-        const markdownPreview = await generateCV(processedData, 'modern', ['personal', 'experience', 'education', 'skills', 'projects', 'certifications', 'video', 'professionalNarrative'], language, 'right');
+        // FIX: Explicitly type the array as SectionId[] to match the function signature.
+        const sectionsForPreview: SectionId[] = ['personal', 'experience', 'education', 'skills', 'projects', 'certifications', 'professionalNarrative'];
+        const stream = generateCV(processedData, 'modern', sectionsForPreview, language, 'right');
+        
+        let markdownPreview = '';
+        for await (const chunk of stream) {
+            markdownPreview += chunk;
+        }
+        
         setEnhancedPreviewMd(markdownPreview);
         setShowEnhancePreviewModal(true);
 
@@ -150,18 +178,21 @@ const App: React.FC = () => {
 
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-green-50 to-cyan-100 text-gray-800 font-sans flex flex-col">
+    <div className="min-h-screen text-stone-800 font-sans flex flex-col">
       <header className="bg-white/80 backdrop-blur-sm shadow-sm sticky top-0 z-10">
         <div className="container mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between items-center py-4">
             <div className="flex items-center space-x-3">
                 <SparklesIcon className="w-8 h-8 text-indigo-600" />
-                <h1 className="text-2xl font-bold text-gray-900 tracking-tight">AI CV Editor</h1>
+                <h1 className="text-2xl font-bold text-stone-900 tracking-tight">Veravox AI CV Editor for you</h1>
                 <SaveStatusIndicator status={saveStatus} />
             </div>
             <div className="flex items-center space-x-4">
                 <LanguageSelector selectedLanguage={language} onLanguageChange={setLanguage} />
-                <a href="https://github.com/google/generative-ai-docs/tree/main/site/en/gemini-api/docs/applications/web" target="_blank" rel="noopener noreferrer" className="text-gray-500 hover:text-gray-900">
+                 <button onClick={() => setIsAboutModalOpen(true)} className="text-stone-500 hover:text-stone-900" aria-label="About this app">
+                    <InfoIcon className="w-7 h-7" />
+                </button>
+                <a href="https://github.com/google/generative-ai-docs/tree/main/site/en/gemini-api/docs/applications/web" target="_blank" rel="noopener noreferrer" className="text-stone-500 hover:text-stone-900">
                     <GithubIcon className="w-7 h-7" />
                 </a>
             </div>
@@ -174,6 +205,10 @@ const App: React.FC = () => {
           cvData={cvData}
           onPersonalChange={updatePersonal}
           onPhotoChange={updatePhoto}
+          onAddSocialLink={addSocialLink}
+          onUpdateSocialLink={updateSocialLink}
+          onRemoveSocialLink={removeSocialLink}
+          onReorderSocialLinks={reorderSocialLinks}
           onAddExperience={addExperience}
           onUpdateExperience={updateExperience}
           onRemoveExperience={removeExperience}
@@ -191,14 +226,20 @@ const App: React.FC = () => {
           onUpdateCertification={updateCertification}
           onRemoveCertification={removeCertification}
           onReorderCertification={reorderCertification}
+          onAddPortfolioItem={addPortfolioItem}
+          onUpdatePortfolioItem={updatePortfolioItem}
+          onRemovePortfolioItem={removePortfolioItem}
+          onReorderPortfolioItem={reorderPortfolioItem}
           onProfessionalNarrativeChange={updateProfessionalNarrative}
           onVideoUrlChange={updateVideoUrl}
+          onSignatureChange={updateSignature}
           sections={sections}
           onSectionOrderChange={setSections}
           onEnhanceCV={handleEnhanceCV}
           isEnhancing={isEnhancing}
           language={language}
           onOpenJobModal={() => setIsJobModalOpen(true)}
+          onOpenCoverLetterModal={() => setIsCoverLetterModalOpen(true)}
         />
         <CVPreview 
           markdownContent={generatedMd} 
@@ -210,22 +251,42 @@ const App: React.FC = () => {
           videoUrl={cvData.videoUrl}
           photoAlignment={photoAlignment}
           onPhotoAlignmentChange={setPhotoAlignment}
+          photoSize={photoSize}
+          onPhotoSizeChange={setPhotoSize}
+          videoAlignment={videoAlignment}
+          onVideoAlignmentChange={setVideoAlignment}
+          videoSize={videoSize}
+          onVideoSizeChange={setVideoSize}
+          portfolio={cvData.portfolio}
+          fontPair={fontPair}
+          onFontPairChange={setFontPair}
         />
       </main>
 
-      <footer className="text-center py-6 text-sm text-gray-600">
-        <div className="container mx-auto flex items-center justify-center space-x-3">
-          <img 
-            src={brandAvatar}
-            alt="veravox/MariIndennitate avatar" 
-            className="w-10 h-10 rounded-full object-cover border-2 border-white shadow-sm" 
-          />
-          <span>
-            App made by <a href="https://github.com/veravox" target="_blank" rel="noopener noreferrer" className="font-semibold text-gray-700 hover:text-indigo-600">veravox/MariIndennitate</a>
-          </span>
+      <footer className="text-center py-6 text-sm text-stone-600">
+        <div className="container mx-auto px-4">
+            <p>
+                Developed by <b>Indennitate Maria Grazia (aka veravox)</b> with AI support.
+            </p>
+            <p className="mt-1">
+                For feedback or feature requests, please email <a href="mailto:veravoxdev@gmail.com" className="font-semibold text-indigo-600 hover:underline">veravoxdev@gmail.com</a>.
+            </p>
+            <div className="mt-4 pt-4 border-t border-stone-200/70 text-xs text-stone-500 italic">
+              <p>
+                  Are you using this app? <a href="https://paypal.me/indennitate" target="_blank" rel="noopener noreferrer" className="font-semibold text-indigo-600 hover:underline not-italic inline-flex items-center">
+                      <CoffeeIcon className="w-4 h-4 mr-1.5" />
+                      BUY ME a coffee
+                  </a> so I can buy something for one of my 20 cats today.
+                  They helped me to create this! My PayPal is <a href="https://paypal.me/indennitate" target="_blank" rel="noopener noreferrer" className="font-semibold text-indigo-600 hover:underline not-italic">@indennitate</a>.
+              </p>
+          </div>
         </div>
       </footer>
 
+      <AboutModal
+        isOpen={isAboutModalOpen}
+        onClose={() => setIsAboutModalOpen(false)}
+      />
 
       <EnhancePreviewModal
         isOpen={showEnhancePreviewModal}
@@ -237,6 +298,13 @@ const App: React.FC = () => {
       <JobOpportunityModal
         isOpen={isJobModalOpen}
         onClose={() => setIsJobModalOpen(false)}
+        cvData={cvData}
+        language={language}
+      />
+
+      <CoverLetterModal
+        isOpen={isCoverLetterModalOpen}
+        onClose={() => setIsCoverLetterModalOpen(false)}
         cvData={cvData}
         language={language}
       />

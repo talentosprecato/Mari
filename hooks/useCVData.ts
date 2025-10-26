@@ -1,16 +1,23 @@
-
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { CVData, PersonalDetails, Experience, Education, Project, Certification } from '../types';
+import { CVData, PersonalDetails, Experience, Education, Project, Certification, PortfolioItem, SocialLink } from '../types';
 
 const initialCVData: CVData = {
   personal: {
     fullName: 'Jane Doe',
     email: 'jane.doe@example.com',
     phone: '123-456-7890',
-    address: '123 Main St, Anytown, USA',
+    dateOfBirth: '1990-01-01',
+    placeOfBirth: 'Anytown, USA',
+    residence: '123 Main St, Anytown, USA',
     linkedin: 'linkedin.com/in/janedoe',
     website: 'janedoe.com',
+    github: 'github.com/janedoe',
+    twitter: 'twitter.com/janedoe',
     photo: '',
+    socialLinks: [
+        { id: crypto.randomUUID(), platform: 'Facebook', url: 'facebook.com/janedoe' },
+        { id: crypto.randomUUID(), platform: 'Instagram', url: 'instagram.com/janedoe' },
+    ]
   },
   experience: [
     {
@@ -38,7 +45,7 @@ const initialCVData: CVData = {
   projects: [
     {
         id: crypto.randomUUID(),
-        name: 'AI CV Editor',
+        name: 'Veravox AI CV Editor',
         technologies: 'React, TypeScript, Gemini API, Tailwind CSS',
         link: 'https://github.com/google/generative-ai-docs/tree/main/site/en/gemini-api/docs/applications/web',
         description: '- Developed a web application that uses AI to generate and enhance professional CVs.\n- Implemented drag-and-drop for section reordering.\n- Integrated Gemini API for content generation and parsing.'
@@ -52,11 +59,21 @@ const initialCVData: CVData = {
         date: '2022-08',
     }
   ],
+  portfolio: [
+    {
+        id: crypto.randomUUID(),
+        title: 'E-commerce Platform Redesign',
+        link: 'https://example.com/portfolio/ecommerce',
+        imageUrl: 'https://images.unsplash.com/photo-1522199755839-a2bacb67c546?q=80&w=1000&auto=format&fit=crop',
+        description: 'Led the UX/UI redesign for a major e-commerce platform, resulting in a 25% increase in conversion rates.'
+    }
+  ],
   professionalNarrative: 'I am a passionate developer driven by creating elegant and efficient solutions to complex problems. My journey through various projects has taught me the importance of collaboration, continuous learning, and user-centric design.',
   videoUrl: '',
+  signature: '',
 };
 
-const LOCAL_STORAGE_KEY = 'ai-cv-editor-data';
+const LOCAL_STORAGE_KEY = 'veravox-ai-cv-editor-data';
 
 export const useCVData = () => {
   const [cvData, setCvData] = useState<CVData>(() => {
@@ -65,8 +82,14 @@ export const useCVData = () => {
       if (savedData) {
         const parsed = JSON.parse(savedData);
         // Basic validation to ensure the loaded data has the expected structure
-        if (parsed.personal && parsed.experience && parsed.education && parsed.projects && parsed.certifications) {
-            return { ...initialCVData, ...parsed };
+        if (parsed.personal && parsed.experience && parsed.education && parsed.projects && parsed.certifications && parsed.portfolio && typeof parsed.signature !== 'undefined') {
+            const dataWithDefaults = { ...initialCVData, ...parsed };
+            // Ensure nested objects and arrays exist
+            dataWithDefaults.personal = { ...initialCVData.personal, ...parsed.personal };
+            if (!dataWithDefaults.personal.socialLinks) {
+                dataWithDefaults.personal.socialLinks = [];
+            }
+            return dataWithDefaults;
         }
       }
     } catch (error) {
@@ -114,13 +137,60 @@ export const useCVData = () => {
     setCvData(newData);
   };
 
-  const updatePersonal = (field: keyof Omit<PersonalDetails, 'photo'>, value: string) => {
+  const updatePersonal = (field: keyof Omit<PersonalDetails, 'photo' | 'socialLinks'>, value: string) => {
     setCvData(prev => ({ ...prev, personal: { ...prev.personal, [field]: value } }));
   };
 
   const updatePhoto = (base64: string) => {
     setCvData(prev => ({ ...prev, personal: { ...prev.personal, photo: base64 } }));
   };
+  
+  const addSocialLink = () => {
+    setCvData(prev => ({
+        ...prev,
+        personal: {
+            ...prev.personal,
+            socialLinks: [
+                ...prev.personal.socialLinks,
+                { id: crypto.randomUUID(), platform: '', url: '' }
+            ]
+        }
+    }));
+  };
+
+  const updateSocialLink = (id: string, field: keyof Omit<SocialLink, 'id'>, value: string) => {
+    setCvData(prev => ({
+      ...prev,
+      personal: {
+        ...prev.personal,
+        socialLinks: prev.personal.socialLinks.map(link =>
+          link.id === id ? { ...link, [field]: value } : link
+        ),
+      },
+    }));
+  };
+
+  const removeSocialLink = (id: string) => {
+    setCvData(prev => ({
+      ...prev,
+      personal: {
+        ...prev.personal,
+        socialLinks: prev.personal.socialLinks.filter(link => link.id !== id),
+      },
+    }));
+  };
+
+  const reorderSocialLinks = useCallback((startIndex: number, endIndex: number) => {
+    setCvData(prev => {
+        const newLinks = Array.from(prev.personal.socialLinks);
+        const [removed] = newLinks.splice(startIndex, 1);
+        newLinks.splice(endIndex, 0, removed);
+        return {
+            ...prev,
+            personal: { ...prev.personal, socialLinks: newLinks }
+        };
+    });
+  }, []);
 
   const addExperience = () => {
     setCvData(prev => ({
@@ -270,6 +340,42 @@ export const useCVData = () => {
       });
   }, []);
 
+  const addPortfolioItem = () => {
+    setCvData(prev => ({
+        ...prev,
+        portfolio: [
+            ...prev.portfolio,
+            {
+                id: crypto.randomUUID(),
+                title: '',
+                link: '',
+                imageUrl: '',
+                description: '',
+            },
+        ],
+    }));
+  };
+
+  const updatePortfolioItem = (id: string, field: keyof Omit<PortfolioItem, 'id'>, value: string) => {
+      setCvData(prev => ({
+          ...prev,
+          portfolio: prev.portfolio.map(item => item.id === id ? { ...item, [field]: value } : item),
+      }));
+  };
+
+  const removePortfolioItem = (id: string) => {
+      setCvData(prev => ({ ...prev, portfolio: prev.portfolio.filter(item => item.id !== id) }));
+  };
+
+  const reorderPortfolioItem = useCallback((startIndex: number, endIndex: number) => {
+      setCvData(prev => {
+          const newPortfolio = Array.from(prev.portfolio);
+          const [removed] = newPortfolio.splice(startIndex, 1);
+          newPortfolio.splice(endIndex, 0, removed);
+          return { ...prev, portfolio: newPortfolio };
+      });
+  }, []);
+
 
   const updateSkills = (value: string) => {
     setCvData(prev => ({ ...prev, skills: value }));
@@ -283,12 +389,20 @@ export const useCVData = () => {
     setCvData(prev => ({...prev, videoUrl: url}));
   };
 
+  const updateSignature = (base64: string) => {
+    setCvData(prev => ({ ...prev, signature: base64 }));
+  };
+
   return {
     cvData,
     saveStatus,
     loadCVData,
     updatePersonal,
     updatePhoto,
+    addSocialLink,
+    updateSocialLink,
+    removeSocialLink,
+    reorderSocialLinks,
     addExperience,
     updateExperience,
     removeExperience,
@@ -305,8 +419,13 @@ export const useCVData = () => {
     updateCertification,
     removeCertification,
     reorderCertification,
+    addPortfolioItem,
+    updatePortfolioItem,
+    removePortfolioItem,
+    reorderPortfolioItem,
     updateSkills,
     updateProfessionalNarrative,
     updateVideoUrl,
+    updateSignature,
   };
 };

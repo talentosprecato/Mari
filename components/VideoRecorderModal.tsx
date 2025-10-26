@@ -2,8 +2,6 @@ import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { CVData } from '../types';
 import { generateVideoScript, startLiveTranscriptionSession } from '../services/geminiService';
 import { MagicWandIcon } from './icons';
-// FIX: The ClientConnection type is not exported from @google/genai.
-// The type is removed from the import.
 import type { LiveServerMessage, Blob as GenAI_Blob } from '@google/genai';
 
 interface VideoRecorderModalProps {
@@ -14,7 +12,7 @@ interface VideoRecorderModalProps {
   language: string;
 }
 
-// Helpers for audio processing
+// Helper for Base64 encoding audio data
 function encode(bytes: Uint8Array) {
   let binary = '';
   const len = bytes.byteLength;
@@ -23,17 +21,50 @@ function encode(bytes: Uint8Array) {
   }
   return btoa(binary);
 }
-function createPcmBlob(data: Float32Array): GenAI_Blob {
-  const l = data.length;
-  const int16 = new Int16Array(l);
-  for (let i = 0; i < l; i++) {
-    int16[i] = data[i] * 32768;
+
+// This code runs in a separate thread to process audio without blocking the UI.
+const audioWorkletProcessorCode = `
+class AudioSenderProcessor extends AudioWorkletProcessor {
+  constructor(options) {
+    super();
+    this.bufferSize = options?.processorOptions?.bufferSize || 4096;
+    this.buffer = new Int16Array(this.bufferSize);
+    this.bufferIndex = 0;
   }
-  return {
-    data: encode(new Uint8Array(int16.buffer)),
-    mimeType: 'audio/pcm;rate=16000',
-  };
+
+  static float32ToInt16(buffer) {
+    let l = buffer.length;
+    let buf = new Int16Array(l);
+    for (let i = 0; i < l; i++) {
+      buf[i] = Math.max(-1, Math.min(1, buffer[i])) * 0x7FFF;
+    }
+    return buf;
+  }
+
+  process(inputs) {
+    const input = inputs[0];
+    if (!input || input.length === 0 || !input[0] || input[0].length === 0) {
+        return true;
+    }
+    
+    const inputData = input[0];
+    if (inputData) {
+      const int16Data = AudioSenderProcessor.float32ToInt16(inputData);
+      
+      for (let i = 0; i < int16Data.length; i++) {
+        this.buffer[this.bufferIndex++] = int16Data[i];
+        if (this.bufferIndex === this.bufferSize) {
+          this.port.postMessage(this.buffer.buffer);
+          this.bufferIndex = 0;
+        }
+      }
+    }
+    return true;
+  }
 }
+
+registerProcessor('audio-sender-processor', AudioSenderProcessor);
+`;
 
 
 const filterGroups = {
@@ -43,13 +74,9 @@ const filterGroups = {
     { id: 'sepia(1)', name: 'Sepia' },
   ],
   'Beauty & Retouch': [
-    { id: 'contrast(1.05) saturate(1.1) brightness(1.05)', name: 'Beauty Lens' },
-    { id: 'blur(3px)', name: 'Soft Focus' },
-  ],
-  'Creative': [
-    { id: 'saturate(2) contrast(1.2)', name: 'Vibrant' },
-    { id: 'hue-rotate(180deg) contrast(1.2)', name: 'Neon Demon' },
-    { id: 'sepia(0.6) contrast(1.1) brightness(0.9) saturate(1.2)', name: 'Vintage' },
+    { id: 'contrast(1.1) saturate(1.1)', name: 'Enhance' },
+    { id: 'brightness(1.1) contrast(0.95)', name: 'Brighten' },
+    { id: 'sepia(0.2) saturate(1.2)', name: 'Warm Glow' },
   ],
 };
 
@@ -92,14 +119,12 @@ export const VideoRecorderModal: React.FC<VideoRecorderModalProps> = ({ isOpen, 
   
   const selectedFilterRef = useRef(selectedFilter);
   const subtitlesRef = useRef(subtitles);
-  // FIX: ClientConnection is not an exported type from @google/genai.
-  // Using an inline type for the session object based on its usage in the app.
   const sessionPromiseRef = useRef<Promise<{
     sendRealtimeInput: (input: { media: GenAI_Blob; }) => void;
     close: () => void;
   }> | null>(null);
   const audioContextRef = useRef<AudioContext | null>(null);
-  const scriptProcessorRef = useRef<ScriptProcessorNode | null>(null);
+  const audioWorkletNodeRef = useRef<AudioWorkletNode | null>(null);
   const subtitleTimeoutRef = useRef<number | null>(null);
 
 
@@ -200,26 +225,40 @@ export const VideoRecorderModal: React.FC<VideoRecorderModalProps> = ({ isOpen, 
         };
       }
 
-       if (isSubtitlesEnabled) {
+      if (isSubtitlesEnabled) {
           sessionPromiseRef.current = startLiveTranscriptionSession(handleLiveMessage, handleLiveError, language);
+          sessionPromiseRef.current.catch(err => {
+              console.error("Failed to connect to live session:", err);
+              setError("Failed to start live subtitles. Please try again.");
+          });
           
           audioContextRef.current = new (window.AudioContext || (window as any).webkitAudioContext)({ sampleRate: 16000 });
           const source = audioContextRef.current.createMediaStreamSource(mediaStream);
-          scriptProcessorRef.current = audioContextRef.current.createScriptProcessor(4096, 1, 1);
           
-          scriptProcessorRef.current.onaudioprocess = (audioProcessingEvent) => {
-              const inputData = audioProcessingEvent.inputBuffer.getChannelData(0);
-              const pcmBlob = createPcmBlob(inputData);
+          const blob = new Blob([audioWorkletProcessorCode], { type: 'application/javascript' });
+          const workletURL = URL.createObjectURL(blob);
+          
+          await audioContextRef.current.audioWorklet.addModule(workletURL);
+          
+          const workletNode = new AudioWorkletNode(audioContextRef.current, 'audio-sender-processor', {
+              processorOptions: { bufferSize: 4096 }
+          });
+          audioWorkletNodeRef.current = workletNode;
+          
+          workletNode.port.onmessage = (event) => {
+              const pcmBlob: GenAI_Blob = {
+                  data: encode(new Uint8Array(event.data)),
+                  mimeType: 'audio/pcm;rate=16000',
+              };
               
-              if (sessionPromiseRef.current && mediaRecorderRef.current?.state === 'recording') {
+              if (sessionPromiseRef.current) {
                   sessionPromiseRef.current.then((session) => {
                       session.sendRealtimeInput({ media: pcmBlob });
                   });
               }
           };
 
-          source.connect(scriptProcessorRef.current);
-          scriptProcessorRef.current.connect(audioContextRef.current.destination);
+          source.connect(workletNode);
       }
     } catch (err) {
       console.error("Error accessing camera and microphone:", err);
@@ -244,9 +283,10 @@ export const VideoRecorderModal: React.FC<VideoRecorderModalProps> = ({ isOpen, 
         sessionPromiseRef.current.then(session => session.close());
         sessionPromiseRef.current = null;
     }
-    if (scriptProcessorRef.current) {
-        scriptProcessorRef.current.disconnect();
-        scriptProcessorRef.current = null;
+    if (audioWorkletNodeRef.current) {
+        audioWorkletNodeRef.current.disconnect();
+        audioWorkletNodeRef.current.port.onmessage = null;
+        audioWorkletNodeRef.current = null;
     }
     if (audioContextRef.current) {
         audioContextRef.current.close();
@@ -396,14 +436,14 @@ export const VideoRecorderModal: React.FC<VideoRecorderModalProps> = ({ isOpen, 
     <div className="fixed inset-0 bg-gray-600 bg-opacity-75 flex items-center justify-center z-50 p-4">
       <div className="bg-white rounded-lg shadow-xl w-full max-w-2xl flex flex-col transform transition-all duration-300 scale-95 opacity-0 animate-fade-in-scale">
         <header className="p-4 border-b flex justify-between items-center">
-            <h2 className="text-xl font-bold text-gray-800">Record Video Presentation</h2>
-            <button onClick={onClose} className="text-gray-400 hover:text-gray-600">&times;</button>
+            <h2 className="text-xl font-bold text-stone-800">Record Video Presentation</h2>
+            <button onClick={onClose} className="text-stone-400 hover:text-stone-600">&times;</button>
         </header>
         <main className="p-6">
             <div className="relative w-full aspect-video bg-black rounded-md overflow-hidden shadow-inner">
                  {error ? (
-                    <div className="absolute inset-0 bg-gray-800 flex flex-col items-center justify-center text-white p-8 text-center z-10">
-                        <p className="text-lg font-semibold mb-2 text-red-400">Recording Unavailable</p>
+                    <div className="absolute inset-0 bg-stone-800 flex flex-col items-center justify-center text-white p-8 text-center z-10">
+                        <p className="text-lg font-semibold mb-2 text-indigo-400">Recording Unavailable</p>
                         <p>{error}</p>
                     </div>
                  ) : (
@@ -412,7 +452,7 @@ export const VideoRecorderModal: React.FC<VideoRecorderModalProps> = ({ isOpen, 
                          <canvas ref={canvasRef} className={`w-full h-full object-cover transition-opacity duration-300 ${recordedBlob ? 'opacity-0' : 'opacity-100'}`}></canvas>
                          <div className={`absolute inset-0 pointer-events-none overlay-${selectedOverlay}`}></div>
                          {recordedBlob && <video key={videoSrc} src={videoSrc} controls autoPlay playsInline className="w-full h-full object-cover"></video>}
-                         {isRecording && <div className="absolute top-4 right-4 text-white bg-red-600 rounded-full px-3 py-1 text-sm font-bold animate-pulse">REC</div>}
+                         {isRecording && <div className="absolute top-4 right-4 text-white bg-indigo-600 rounded-full px-3 py-1 text-sm font-bold animate-pulse">REC</div>}
                          {isRecording && <div className="absolute bottom-4 left-4 text-white bg-black/50 rounded-md px-2 py-1 text-sm">0:{String(countdown).padStart(2, '0')}</div>}
                          
                          {isRecording && script && script.trim() !== '' && (
@@ -432,15 +472,15 @@ export const VideoRecorderModal: React.FC<VideoRecorderModalProps> = ({ isOpen, 
         {!recordedBlob && (
         <div className="px-6 pb-4 border-b space-y-4">
             <div>
-                <h4 className="text-sm font-medium text-gray-700 mb-2">Video Effects</h4>
-                <div className="p-3 bg-gray-50 rounded-md border">
+                <h4 className="text-sm font-medium text-stone-700 mb-2">Video Effects</h4>
+                <div className="p-3 bg-stone-50 rounded-md border">
                     <div className="flex border-b mb-3 -mx-3 px-3">
                         <button
                             onClick={() => setActiveTab('filters')}
                             className={`-mb-px px-3 py-2 text-sm font-semibold transition-colors ${
                                 activeTab === 'filters'
                                     ? 'border-b-2 border-indigo-500 text-indigo-600'
-                                    : 'text-gray-500 hover:text-gray-700 border-b-2 border-transparent'
+                                    : 'text-stone-500 hover:text-stone-700 border-b-2 border-transparent'
                             }`}
                         >
                             Filters
@@ -450,7 +490,7 @@ export const VideoRecorderModal: React.FC<VideoRecorderModalProps> = ({ isOpen, 
                             className={`-mb-px px-3 py-2 text-sm font-semibold transition-colors ${
                                 activeTab === 'overlays'
                                     ? 'border-b-2 border-indigo-500 text-indigo-600'
-                                    : 'text-gray-500 hover:text-gray-700 border-b-2 border-transparent'
+                                    : 'text-stone-500 hover:text-stone-700 border-b-2 border-transparent'
                             }`}
                         >
                             Overlays
@@ -461,11 +501,11 @@ export const VideoRecorderModal: React.FC<VideoRecorderModalProps> = ({ isOpen, 
                         <div className="space-y-3">
                             {Object.entries(filterGroups).map(([groupName, filters]) => (
                                 <div key={groupName}>
-                                    <label className="text-xs font-medium text-gray-600 mb-1.5 block">{groupName}</label>
+                                    <label className="text-xs font-medium text-stone-600 mb-1.5 block">{groupName}</label>
                                     <div className="flex flex-wrap gap-2">
                                         {filters.map(f => (
                                             <button key={f.id} onClick={() => setSelectedFilter(f.id)}
-                                                className={`px-3 py-1 border rounded-md text-sm font-medium transition-colors ${selectedFilter === f.id ? 'bg-indigo-600 text-white border-indigo-600' : 'bg-white text-gray-700 hover:bg-gray-100'}`}
+                                                className={`px-3 py-1 border rounded-md text-sm font-medium transition-colors ${selectedFilter === f.id ? 'bg-indigo-600 text-white border-indigo-600' : 'bg-white text-stone-700 hover:bg-stone-100'}`}
                                             >
                                                 {f.name}
                                             </button>
@@ -480,7 +520,7 @@ export const VideoRecorderModal: React.FC<VideoRecorderModalProps> = ({ isOpen, 
                          <div className="flex flex-wrap gap-2">
                             {overlays.map(o => (
                                 <button key={o.id} onClick={() => setSelectedOverlay(o.id)}
-                                    className={`px-3 py-1 border rounded-md text-sm font-medium transition-colors ${selectedOverlay === o.id ? 'bg-indigo-600 text-white border-indigo-600' : 'bg-white text-gray-700 hover:bg-gray-100'}`}
+                                    className={`px-3 py-1 border rounded-md text-sm font-medium transition-colors ${selectedOverlay === o.id ? 'bg-indigo-600 text-white border-indigo-600' : 'bg-white text-stone-700 hover:bg-stone-100'}`}
                                 >
                                     {o.name}
                                 </button>
@@ -490,10 +530,10 @@ export const VideoRecorderModal: React.FC<VideoRecorderModalProps> = ({ isOpen, 
                 </div>
             </div>
              <div>
-                <h4 className="text-sm font-medium text-gray-700 mb-2">AI Script & Teleprompter</h4>
-                <div className="space-y-3 p-3 bg-gray-50 rounded-md border">
+                <h4 className="text-sm font-medium text-stone-700 mb-2">AI Script & Teleprompter</h4>
+                <div className="space-y-3 p-3 bg-stone-50 rounded-md border">
                      <div className="flex items-center justify-between">
-                        <label htmlFor="subtitles-toggle" className="text-xs font-medium text-gray-600 flex-1">
+                        <label htmlFor="subtitles-toggle" className="text-xs font-medium text-stone-600 flex-1">
                             Generate Subtitles
                         </label>
                         <button
@@ -501,7 +541,7 @@ export const VideoRecorderModal: React.FC<VideoRecorderModalProps> = ({ isOpen, 
                             role="switch"
                             aria-checked={isSubtitlesEnabled}
                             onClick={() => setIsSubtitlesEnabled(!isSubtitlesEnabled)}
-                            className={`${isSubtitlesEnabled ? 'bg-indigo-600' : 'bg-gray-200'} relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2`}
+                            className={`${isSubtitlesEnabled ? 'bg-indigo-600' : 'bg-stone-200'} relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2`}
                             disabled={isRecording}
                         >
                             <span className={`${isSubtitlesEnabled ? 'translate-x-6' : 'translate-x-1'} inline-block h-4 w-4 transform rounded-full bg-white transition-transform`} />
@@ -512,13 +552,13 @@ export const VideoRecorderModal: React.FC<VideoRecorderModalProps> = ({ isOpen, 
                         onChange={(e) => setScript(e.target.value)}
                         rows={4}
                         placeholder="Paste your script here, or generate one with AI to get started."
-                        className="w-full text-sm px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500"
+                        className="w-full text-sm px-3 py-2 border border-stone-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500"
                         disabled={isRecording}
                     />
                     <div className='grid grid-cols-2 gap-3'>
                         <div>
-                            <label className="text-xs font-medium text-gray-600 mb-1 block">Scroll Speed</label>
-                            <div className="flex space-x-1 rounded-md bg-gray-200 p-1">
+                            <label className="text-xs font-medium text-stone-600 mb-1 block">Scroll Speed</label>
+                            <div className="flex space-x-1 rounded-md bg-stone-200 p-1">
                                 {scrollSpeeds.map(item => (
                                     <button
                                         key={item.label}
@@ -526,7 +566,7 @@ export const VideoRecorderModal: React.FC<VideoRecorderModalProps> = ({ isOpen, 
                                         className={`w-full rounded py-1 text-xs font-semibold transition-colors ${
                                             scrollSpeed === item.speed
                                                 ? 'bg-white shadow-sm text-indigo-600'
-                                                : 'text-gray-600 hover:bg-gray-300'
+                                                : 'text-stone-600 hover:bg-stone-300'
                                         }`}
                                     >
                                         {item.label}
@@ -538,11 +578,11 @@ export const VideoRecorderModal: React.FC<VideoRecorderModalProps> = ({ isOpen, 
                              <button 
                                 onClick={handleGenerateScript}
                                 disabled={isGeneratingScript || !!error}
-                                className="w-full h-full flex items-center justify-center px-4 py-2 border border-gray-300 text-sm font-medium rounded-md shadow-sm text-gray-700 bg-white hover:bg-gray-50 disabled:bg-gray-200 disabled:cursor-not-allowed"
+                                className="w-full h-full flex items-center justify-center px-4 py-2 border border-stone-300 text-sm font-medium rounded-md shadow-sm text-stone-700 bg-white hover:bg-stone-50 disabled:bg-stone-200 disabled:cursor-not-allowed"
                             >
                                 {isGeneratingScript ? (
                                     <>
-                                     <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-gray-500" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>
+                                     <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-stone-500" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>
                                      Generating...
                                     </>
                                 ) : (
@@ -558,21 +598,21 @@ export const VideoRecorderModal: React.FC<VideoRecorderModalProps> = ({ isOpen, 
         </div>
         )}
 
-         <footer className="p-4 bg-gray-50 flex justify-between items-center">
+         <footer className="p-4 bg-stone-50 flex justify-between items-center">
           <div>
-            {!isRecording && !recordedBlob && <span className="text-sm text-gray-500">Max 60 seconds.</span>}
+            {!isRecording && !recordedBlob && <span className="text-sm text-stone-500">Max 60 seconds.</span>}
           </div>
           <div className="flex space-x-4">
             {isRecording ? (
-                <button onClick={handleStopRecording} className="px-6 py-2 border rounded-md text-sm font-medium text-white bg-red-600 hover:bg-red-700">Stop</button>
+                <button onClick={handleStopRecording} className="px-6 py-2 border rounded-md text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700">Stop</button>
             ) : recordedBlob ? (
                 <>
-                    <button onClick={handleRetake} className="px-4 py-2 border border-gray-300 rounded-md text-sm font-medium text-gray-700 hover:bg-gray-100">Retake</button>
+                    <button onClick={handleRetake} className="px-4 py-2 border border-stone-300 rounded-md text-sm font-medium text-stone-700 hover:bg-stone-100">Retake</button>
                     <button onClick={handleSave} className="px-6 py-2 border border-transparent rounded-md text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700">Save</button>
                 </>
             ) : (
                 <>
-                    <button onClick={onClose} className="px-4 py-2 border border-gray-300 rounded-md text-sm font-medium text-gray-700 hover:bg-gray-100">Cancel</button>
+                    <button onClick={onClose} className="px-4 py-2 border border-stone-300 rounded-md text-sm font-medium text-stone-700 hover:bg-stone-100">Cancel</button>
                     <button 
                         onClick={handleStartRecording} 
                         disabled={!stream || !!error}

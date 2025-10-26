@@ -1,6 +1,8 @@
 import React, { useEffect, useState, useRef } from 'react';
 import { TemplateSelector } from './TemplateSelector';
-import { DownloadIcon, SparklesIcon, DocxIcon, XCircleIcon, GoogleDriveIcon } from './icons';
+import { FontSelector } from './FontSelector';
+import { DownloadIcon, SparklesIcon, XCircleIcon, ClipboardIcon } from './icons';
+import { PortfolioItem } from '../types';
 
 // This is a global function from the 'marked' library loaded in index.html
 declare global {
@@ -10,7 +12,6 @@ declare global {
         };
         jspdf: any;
         html2canvas: any;
-        htmlToDocx: any;
     }
 }
 
@@ -24,38 +25,51 @@ interface CVPreviewProps {
   videoUrl?: string;
   photoAlignment: 'left' | 'right' | 'none';
   onPhotoAlignmentChange: (alignment: 'left' | 'right' | 'none') => void;
+  photoSize: 'small' | 'medium' | 'large';
+  onPhotoSizeChange: (size: 'small' | 'medium' | 'large') => void;
+  videoAlignment: 'left' | 'right' | 'center' | 'full';
+  onVideoAlignmentChange: (alignment: 'left' | 'right' | 'center' | 'full') => void;
+  videoSize: 'small' | 'medium' | 'large';
+  onVideoSizeChange: (size: 'small' | 'medium' | 'large') => void;
+  portfolio: PortfolioItem[];
+  fontPair: string;
+  onFontPairChange: (id: string) => void;
 }
 
-const PhotoAlignmentSelector: React.FC<{
-    alignment: 'left' | 'right' | 'none';
-    onChange: (alignment: 'left' | 'right' | 'none') => void;
-}> = ({ alignment, onChange }) => {
-    const options = [
-        { id: 'left', label: 'Left' },
-        { id: 'right', label: 'Right' },
-        { id: 'none', label: 'None' },
-    ];
+interface Option<T extends string> {
+    id: T;
+    label: string;
+}
+
+interface OptionSelectorProps<T extends string> {
+    label: string;
+    options: Option<T>[];
+    selectedOption: T;
+    onChange: (option: T) => void;
+}
+
+const OptionSelector = <T extends string>({ label, options, selectedOption, onChange }: OptionSelectorProps<T>) => {
     return (
-        <div className="mb-6">
-            <h3 className="text-lg font-semibold text-gray-800 mb-2">Photo Alignment</h3>
-            <div className="flex space-x-2 rounded-md bg-gray-100 p-1">
+        <div>
+            <h3 className="text-lg font-semibold text-stone-800 mb-2">{label}</h3>
+            <div className="flex space-x-2 rounded-md bg-stone-100 p-1">
                 {options.map(option => (
                     <button
                         key={option.id}
-                        onClick={() => onChange(option.id as 'left' | 'right' | 'none')}
+                        onClick={() => onChange(option.id)}
                         className={`w-full rounded py-1.5 text-sm font-medium transition-colors ${
-                            alignment === option.id
+                            selectedOption === option.id
                                 ? 'bg-white shadow-sm text-indigo-600'
-                                : 'text-gray-600 hover:bg-gray-200'
+                                : 'text-stone-600 hover:bg-stone-200'
                         }`}
-                        aria-pressed={alignment === option.id}
+                        aria-pressed={selectedOption === option.id}
                     >
                         {option.label}
                     </button>
                 ))}
             </div>
         </div>
-    )
+    );
 }
 
 const CVPreviewStyles = () => (
@@ -63,11 +77,11 @@ const CVPreviewStyles = () => (
         :root {
             /* Default Theme Variables */
             --cv-bg-color: #fff;
-            --cv-text-color: #374151; /* gray-700 */
+            --cv-text-color: #292524; /* stone-800 */
             --cv-primary-color: #4f46e5; /* indigo-600 */
-            --cv-secondary-color: #4b5563; /* gray-600 */
+            --cv-secondary-color: #57534e; /* stone-600 */
             --cv-link-color: #4f46e5;
-            --cv-border-color: #e5e7eb; /* gray-200 */
+            --cv-border-color: #e7e5e4; /* stone-200 */
             
             --cv-font-sans: 'Inter', system-ui, sans-serif;
             --cv-font-serif: 'Lora', Georgia, serif;
@@ -80,45 +94,60 @@ const CVPreviewStyles = () => (
             --cv-heading-letter-spacing: -0.025em;
         }
 
+        /* Font Pairings */
+        .font-pair-inter-lora {
+            --cv-font-sans: 'Inter', system-ui, sans-serif;
+            --cv-font-serif: 'Lora', Georgia, serif;
+        }
+        .font-pair-roboto {
+            --cv-font-sans: 'Roboto', Arial, sans-serif;
+            --cv-font-serif: 'Roboto', Arial, sans-serif;
+        }
+        .font-pair-arial {
+            --cv-font-sans: Arial, Helvetica, sans-serif;
+            --cv-font-serif: Arial, Helvetica, sans-serif;
+        }
+        .font-pair-times {
+            --cv-font-sans: 'Times New Roman', Times, serif;
+            --cv-font-serif: 'Times New Roman', Times, serif;
+        }
+        .font-pair-verdana {
+            --cv-font-sans: Verdana, Geneva, sans-serif;
+            --cv-font-serif: Verdana, Geneva, sans-serif;
+        }
+
+
         /* Template Specific Variables */
         .template-modern, .template-two-column-professional {
             --cv-primary-color: #4f46e5; /* indigo-600 */
-            --cv-font-sans: 'Inter', sans-serif;
         }
-        .template-creative {
-            --cv-primary-color: #db2777; /* pink-600 */
-            --cv-secondary-color: #16a34a; /* green-600 */
-            --cv-font-sans: 'Inter', sans-serif;
+        .template-creative, .template-two-column-creative {
+            --cv-primary-color: #9333ea; /* purple-600 */
+            --cv-secondary-color: #944a1d; /* custom brown */
             --cv-heading-letter-spacing: -0.01em;
         }
         .template-classic {
-            --cv-primary-color: #111827; /* gray-900 */
-            --cv-secondary-color: #374151;
-            --cv-font-sans: 'Lora', serif;
-            --cv-font-serif: 'Lora', serif;
+            --cv-primary-color: #1c1917; /* stone-900 */
+            --cv-secondary-color: #292524;
             --cv-line-height: 1.5;
         }
         .template-ai-content-editor {
-            --cv-primary-color: #0d9488; /* teal-600 */
-            --cv-font-sans: 'Inter', sans-serif;
+            --cv-primary-color: #4338ca; /* indigo-700 */
             --cv-font-mono: 'Roboto Mono', monospace;
         }
         .template-social-media-creative {
-            --cv-primary-color: #c026d3; /* fuchsia-600 */
+            --cv-primary-color: #0ea5e9; /* sky-500 */
             --cv-secondary-color: #ea580c; /* orange-600 */
-            --cv-font-sans: 'Inter', sans-serif;
             --cv-heading-font-weight: 800;
         }
         .template-technical {
-            --cv-primary-color: #2563eb; /* blue-600 */
-            --cv-font-sans: 'Inter', sans-serif;
+            --cv-primary-color: #334155; /* slate-700 */
             --cv-font-mono: 'Roboto Mono', monospace;
             --cv-font-size: 15px;
         }
         .template-minimalist {
-            --cv-primary-color: #1f2937; /* gray-800 */
-            --cv-secondary-color: #6b7280; /* gray-500 */
-            --cv-font-sans: 'Inter', sans-serif;
+            --cv-primary-color: #1c1917; /* stone-900 */
+            --cv-secondary-color: #78716c; /* stone-500 */
             --cv-line-height: 1.7;
         }
 
@@ -166,6 +195,13 @@ const CVPreviewStyles = () => (
         .cv-preview-content ul,
         .cv-preview-content ol {
             margin-bottom: 1em;
+            font-family: var(--cv-font-serif);
+        }
+
+        .template-classic .cv-preview-content p,
+        .template-classic .cv-preview-content ul,
+        .template-classic .cv-preview-content ol {
+             font-family: var(--cv-font-sans);
         }
 
         .cv-preview-content a {
@@ -203,10 +239,11 @@ const CVPreviewStyles = () => (
             margin-left: 0;
             font-style: italic;
             color: var(--cv-secondary-color);
+            font-family: var(--cv-font-serif);
         }
 
         .cv-preview-content code {
-            background-color: #f3f4f6; /* gray-100 */
+            background-color: #f5f5f4; /* stone-100 */
             padding: 0.2em 0.4em;
             margin: 0;
             font-size: 85%;
@@ -215,11 +252,12 @@ const CVPreviewStyles = () => (
         }
         .template-ai-content-editor .cv-preview-content code,
         .template-technical .cv-preview-content code {
-            background-color: #e5e7eb; /* gray-200 */
-            color: #1e293b; /* slate-800 */
+            background-color: #e7e5e4; /* stone-200 */
+            color: #1c1917; /* stone-900 */
         }
 
-        .template-creative .cv-preview-content h2 {
+        .template-creative .cv-preview-content h2,
+        .template-two-column-creative .cv-preview-content h2 {
             border-image: linear-gradient(to right, var(--cv-primary-color), var(--cv-secondary-color)) 1;
             border-width: 0 0 3px 0;
             border-style: solid;
@@ -228,6 +266,14 @@ const CVPreviewStyles = () => (
         .video-presentation-section {
             margin-bottom: 1em;
         }
+        .video-presentation-section.size-small .video-container { max-width: 30%; }
+        .video-presentation-section.size-medium .video-container { max-width: 50%; }
+        .video-presentation-section.size-large .video-container { max-width: 75%; }
+        .video-presentation-section.align-left .video-container { margin-right: auto; margin-left: 0; }
+        .video-presentation-section.align-right .video-container { margin-left: auto; margin-right: 0; }
+        .video-presentation-section.align-center .video-container { margin-left: auto; margin-right: auto; }
+        .video-presentation-section.align-full .video-container { max-width: 100%; }
+
         .video-presentation-section .video-container {
             width: 100%;
             aspect-ratio: 16 / 9;
@@ -272,12 +318,18 @@ const CVPreviewStyles = () => (
             margin: auto;
         }
 
-        .template-two-column-professional .cv-preview-content > table {
+        .photo-size-small .cv-preview-content > table:first-of-type img { max-width: 80px; max-height: 80px; }
+        .photo-size-medium .cv-preview-content > table:first-of-type img { max-width: 120px; max-height: 120px; }
+        .photo-size-large .cv-preview-content > table:first-of-type img { max-width: 160px; max-height: 160px; }
+
+        .template-two-column-professional .cv-preview-content > table,
+        .template-two-column-creative .cv-preview-content > table {
             width: 100%;
             border: none;
             border-collapse: collapse;
         }
-        .template-two-column-professional .cv-preview-content > table td {
+        .template-two-column-professional .cv-preview-content > table td,
+        .template-two-column-creative .cv-preview-content > table td {
             border: none;
             padding: 0 1em;
             vertical-align: top;
@@ -291,9 +343,96 @@ const CVPreviewStyles = () => (
             width: 35%;
             padding-right: 0;
         }
+
+        .template-two-column-creative .cv-preview-content > table td:first-child {
+            width: 35%;
+            padding-left: 0;
+        }
+        .template-two-column-creative .cv-preview-content > table td:last-child {
+            width: 65%;
+            padding-right: 0;
+        }
+
         .template-two-column-professional .cv-preview-content > table h2:first-child,
-        .template-two-column-professional .cv-preview-content > table h3:first-child {
+        .template-two-column-professional .cv-preview-content > table h3:first-child,
+        .template-two-column-creative .cv-preview-content > table h2:first-child,
+        .template-two-column-creative .cv-preview-content > table h3:first-child {
             margin-top: 0;
+        }
+
+        /* Portfolio Gallery */
+        .portfolio-gallery-section {
+            break-before: page; /* For printing */
+            margin-top: 1.5em;
+        }
+        .portfolio-gallery-section h2 {
+            margin-top: 0;
+        }
+
+        .portfolio-grid {
+            display: grid;
+            grid-template-columns: repeat(1, 1fr);
+            gap: 1.5rem;
+            margin-top: 1em;
+        }
+
+        @media (min-width: 768px) {
+            .portfolio-grid {
+                grid-template-columns: repeat(2, 1fr);
+            }
+        }
+        
+        .portfolio-card {
+            border: 1px solid var(--cv-border-color);
+            border-radius: 0.5rem; /* rounded-lg */
+            overflow: hidden;
+            transition: box-shadow 0.2s ease-in-out;
+            background-color: var(--cv-bg-color);
+            display: flex;
+            flex-direction: column;
+        }
+
+        .portfolio-card:hover {
+            box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
+        }
+        
+        .portfolio-card a {
+            text-decoration: none;
+            color: inherit;
+        }
+
+        .portfolio-image-link {
+            display: block;
+        }
+
+        .portfolio-image {
+            width: 100%;
+            aspect-ratio: 16 / 10;
+            object-fit: cover;
+            background-color: #f5f5f4; /* stone-100 */
+            border-bottom: 1px solid var(--cv-border-color);
+        }
+
+        .portfolio-card-content {
+            padding: 1rem;
+            flex-grow: 1;
+        }
+
+        .portfolio-card-content h3 {
+            margin: 0 0 0.5em 0;
+            font-size: 1.1em;
+            font-weight: 600;
+            color: var(--cv-text-color);
+        }
+        .portfolio-card-content h3 a:hover {
+            color: var(--cv-primary-color);
+        }
+
+        .portfolio-card-content p {
+            font-size: 0.9em;
+            line-height: 1.5;
+            color: var(--cv-secondary-color);
+            margin-bottom: 0;
         }
 
     `}</style>
@@ -301,34 +440,34 @@ const CVPreviewStyles = () => (
 
 const LoadingSkeleton = () => (
     <div className="animate-pulse space-y-6">
-        <div className="h-6 bg-gray-300 rounded-md w-1/3"></div>
+        <div className="h-6 bg-stone-300 rounded-md w-1/3"></div>
         <div className="space-y-3">
-            <div className="h-4 bg-gray-300 rounded w-full"></div>
-            <div className="h-4 bg-gray-300 rounded w-5/6"></div>
+            <div className="h-4 bg-stone-300 rounded w-full"></div>
+            <div className="h-4 bg-stone-300 rounded w-5/6"></div>
         </div>
-        <div className="h-6 bg-gray-300 rounded-md w-1/4"></div>
+        <div className="h-6 bg-stone-300 rounded-md w-1/4"></div>
         <div className="space-y-3">
-            <div className="h-4 bg-gray-300 rounded w-1/2"></div>
-            <div className="h-4 bg-gray-300 rounded w-full"></div>
-            <div className="h-4 bg-gray-300 rounded w-full"></div>
+            <div className="h-4 bg-stone-300 rounded w-1/2"></div>
+            <div className="h-4 bg-stone-300 rounded w-full"></div>
+            <div className="h-4 bg-stone-300 rounded w-full"></div>
         </div>
-         <div className="h-6 bg-gray-300 rounded-md w-1/4"></div>
+         <div className="h-6 bg-stone-300 rounded-md w-1/4"></div>
         <div className="space-y-3">
-            <div className="h-4 bg-gray-300 rounded w-1/2"></div>
-            <div className="h-4 bg-gray-300 rounded w-full"></div>
-            <div className="h-4 bg-gray-300 rounded w-full"></div>
+            <div className="h-4 bg-stone-300 rounded w-1/2"></div>
+            <div className="h-4 bg-stone-300 rounded w-full"></div>
+            <div className="h-4 bg-stone-300 rounded w-full"></div>
         </div>
     </div>
 );
 
 const Placeholder = () => (
-    <div className="text-center text-gray-500">
-        <div className="bg-gray-100 border-2 border-dashed border-gray-300 rounded-lg p-12">
-            <svg className="mx-auto h-12 w-12 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
+    <div className="text-center text-stone-500">
+        <div className="bg-stone-100 border-2 border-dashed border-stone-300 rounded-lg p-12">
+            <svg className="mx-auto h-12 w-12 text-stone-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
             </svg>
-            <h3 className="mt-2 text-sm font-medium text-gray-900">AI Generated CV</h3>
-            <p className="mt-1 text-sm text-gray-500">Fill out the form and click "Generate" to see your professional CV here.</p>
+            <h3 className="mt-2 text-sm font-medium text-stone-900">Veravox AI CV Editor</h3>
+            <p className="mt-1 text-sm text-stone-500">Fill out the form and click "Generate" to see your professional CV here.</p>
         </div>
     </div>
 )
@@ -364,7 +503,7 @@ const getVideoEmbed = (url: string) => {
 
   // Fallback for other URLs (LinkedIn, Facebook, etc.)
   return (
-    <div className="p-4 text-sm bg-gray-100 rounded-md">
+    <div className="p-4 text-sm bg-stone-100 rounded-md">
       <p>A video presentation is available at the following link:</p>
       <a href={url} target="_blank" rel="noopener noreferrer" className="text-indigo-600 hover:underline break-all">{url}</a>
     </div>
@@ -372,10 +511,24 @@ const getVideoEmbed = (url: string) => {
 };
 
 
-export const CVPreview: React.FC<CVPreviewProps> = ({ markdownContent, isLoading, error, selectedTemplate, onTemplateChange, onGenerate, videoUrl, photoAlignment, onPhotoAlignmentChange }) => {
+export const CVPreview: React.FC<CVPreviewProps> = ({ 
+    markdownContent, 
+    isLoading, 
+    error, 
+    selectedTemplate, 
+    onTemplateChange, 
+    onGenerate, 
+    videoUrl, 
+    photoAlignment, onPhotoAlignmentChange, 
+    photoSize, onPhotoSizeChange,
+    videoAlignment, onVideoAlignmentChange,
+    videoSize, onVideoSizeChange,
+    portfolio, fontPair, onFontPairChange 
+}) => {
   const [htmlContent, setHtmlContent] = useState('');
-  const [isExporting, setIsExporting] = useState<false | 'pdf' | 'docx' | 'drive'>(false);
+  const [isExporting, setIsExporting] = useState<false | 'pdf'>(false);
   const [exportError, setExportError] = useState<string | null>(null);
+  const [copyStatus, setCopyStatus] = useState('Copy');
   const previewRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -393,6 +546,18 @@ export const CVPreview: React.FC<CVPreviewProps> = ({ markdownContent, isLoading
       return () => clearTimeout(timer);
     }
   }, [exportError]);
+
+  const handleCopyMarkdown = () => {
+    if (!markdownContent) return;
+    navigator.clipboard.writeText(markdownContent).then(() => {
+        setCopyStatus('Copied!');
+        setTimeout(() => setCopyStatus('Copy'), 2000);
+    }).catch(err => {
+        console.error('Failed to copy text: ', err);
+        setCopyStatus('Error');
+        setTimeout(() => setCopyStatus('Copy'), 2000);
+    });
+  };
 
   const handleExportPDF = async () => {
     if (!previewRef.current || !markdownContent) return;
@@ -438,68 +603,17 @@ export const CVPreview: React.FC<CVPreviewProps> = ({ markdownContent, isLoading
         setIsExporting(false);
     }
   };
-  
-  const handleExportDOCX = async () => {
-    if (!previewRef.current || !markdownContent) return;
-
-    setIsExporting('docx');
-    setExportError(null);
-    try {
-        // Clone the element to avoid modifying the original
-        const contentNode = previewRef.current.cloneNode(true) as HTMLElement;
-        
-        // Remove the video element as it's not supported well in DOCX
-        const videoSection = contentNode.querySelector('.video-presentation-section');
-        if (videoSection) {
-            videoSection.innerHTML = `<p><em>[A video presentation was included here.]</em></p>`;
-        }
-        
-        const fileBuffer = await window.htmlToDocx(contentNode.outerHTML, null, {
-            table: { row: { cantSplit: true } },
-            footer: true,
-            pageNumber: true,
-        });
-
-        const blob = new Blob([fileBuffer], { type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' });
-        
-        const link = document.createElement('a');
-        link.href = URL.createObjectURL(blob);
-        link.download = 'cv.docx';
-        document.body.appendChild(link);
-        link.click();
-        document.body.removeChild(link);
-
-    } catch (err) {
-        console.error("Failed to export DOCX", err);
-        setExportError("Sorry, there was an error exporting the DOCX. Please try again.");
-    } finally {
-        setIsExporting(false);
-    }
-  };
-
-  const handleSaveToDrive = async () => {
-    if (!previewRef.current || !markdownContent) return;
-
-    setIsExporting('drive');
-    setExportError(null);
-    // Simulate API call and show message, as a full OAuth implementation is out of scope.
-    setTimeout(() => {
-        setExportError("Save to Google Drive functionality is not yet implemented.");
-        setIsExporting(false);
-    }, 1500);
-  };
-
 
   const renderContent = () => {
-    if(isLoading) return <LoadingSkeleton />;
-    if(error) return <div className="text-center text-red-600 bg-red-50 p-4 rounded-md">{error}</div>;
-    if(!markdownContent && !isLoading) return <Placeholder />;
+    if (isLoading) return <LoadingSkeleton />;
+    if (error) return <div className="text-center text-red-600 bg-red-50 p-4 rounded-md">{error}</div>;
+    if (!markdownContent && (!portfolio || portfolio.length === 0)) return <Placeholder />;
 
     return (
         <div ref={previewRef} className="p-2">
              <div className="cv-preview-content">
                 {videoUrl && (
-                     <div className="video-presentation-section">
+                     <div className={`video-presentation-section size-${videoSize} align-${videoAlignment}`}>
                         <h2>Video Presentation</h2>
                         {getVideoEmbed(videoUrl)}
                     </div>
@@ -507,58 +621,80 @@ export const CVPreview: React.FC<CVPreviewProps> = ({ markdownContent, isLoading
                 <div
                   dangerouslySetInnerHTML={{ __html: htmlContent }}
                 />
+                {portfolio && portfolio.length > 0 && (
+                  <div className="portfolio-gallery-section">
+                      <h2>Portfolio</h2>
+                      <div className="portfolio-grid">
+                          {portfolio.map(item => (
+                              <div key={item.id} className="portfolio-card">
+                                  <a href={item.link} target="_blank" rel="noopener noreferrer" className="portfolio-image-link">
+                                      <img 
+                                        src={item.imageUrl} 
+                                        alt={item.title} 
+                                        className="portfolio-image" 
+                                        onError={(e) => { e.currentTarget.src = 'https://via.placeholder.com/400x250?text=Image+not+found' }}
+                                      />
+                                  </a>
+                                  <div className="portfolio-card-content">
+                                      <h3>
+                                          <a href={item.link} target="_blank" rel="noopener noreferrer">
+                                              {item.title}
+                                          </a>
+                                      </h3>
+                                      <p>{item.description}</p>
+                                  </div>
+                              </div>
+                          ))}
+                      </div>
+                  </div>
+                )}
             </div>
         </div>
-    )
+    );
   }
 
   return (
-    <div className="bg-white/80 backdrop-blur-sm p-6 sm:p-8 rounded-lg shadow-md sticky top-24">
+    <div className="bg-white/80 backdrop-blur-sm p-6 sm:p-8 rounded-lg shadow-lg sticky top-24 border border-stone-200/50">
         <CVPreviewStyles />
-        <div className="flex flex-wrap justify-between items-center mb-6 border-b pb-3 gap-4">
-            <h2 className="text-2xl font-bold text-gray-900">CV Preview</h2>
-            <div className="flex items-center space-x-2">
-                 <button
-                    onClick={handleSaveToDrive}
-                    disabled={!markdownContent || isLoading || !!isExporting}
-                    className="flex items-center justify-center px-3 py-2 border border-gray-300 text-sm font-medium rounded-md shadow-sm text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 disabled:bg-gray-200 disabled:text-gray-500 disabled:cursor-not-allowed"
-                >
-                    {isExporting === 'drive' ? 'Saving...' : <><GoogleDriveIcon className="w-5 h-5 mr-2" /> Drive</>}
-                </button>
-                <button
-                    onClick={handleExportDOCX}
-                    disabled={!markdownContent || isLoading || !!isExporting}
-                    className="flex items-center justify-center px-3 py-2 border border-gray-300 text-sm font-medium rounded-md shadow-sm text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 disabled:bg-gray-200 disabled:text-gray-500 disabled:cursor-not-allowed"
-                >
-                    {isExporting === 'docx' ? 'Exporting...' : <><DocxIcon className="w-5 h-5 mr-2" /> DOCX</>}
-                </button>
-                <button
-                    onClick={handleExportPDF}
-                    disabled={!markdownContent || isLoading || !!isExporting}
-                    className="flex items-center justify-center px-3 py-2 border border-gray-300 text-sm font-medium rounded-md shadow-sm text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 disabled:bg-gray-200 disabled:text-gray-500 disabled:cursor-not-allowed"
-                >
-                    {isExporting === 'pdf' ? 'Exporting...' : <><DownloadIcon className="w-5 h-5 mr-2" /> PDF</>}
-                </button>
-                 <button
-                    onClick={onGenerate}
-                    disabled={isLoading || !!isExporting}
-                    className="flex items-center justify-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 disabled:bg-indigo-300 disabled:cursor-not-allowed"
-                >
-                    {isLoading ? (
-                        <>
-                            <svg className="animate-spin -ml-1 mr-3 h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                            </svg>
-                            Generating...
-                        </>
-                    ) : (
-                        <>
-                            <SparklesIcon className="w-5 h-5 mr-2" />
-                            Generate
-                        </>
-                    )}
-                </button>
+        <div className="flex flex-wrap justify-between items-center mb-6 border-b border-stone-200 pb-3 gap-4">
+            <h2 className="text-2xl font-bold text-stone-900">CV Preview</h2>
+            <div className='w-full'>
+                <div className="flex items-center space-x-2">
+                     <button
+                        onClick={handleCopyMarkdown}
+                        disabled={!markdownContent || isLoading || !!isExporting}
+                        className="flex items-center justify-center px-3 py-2 border border-stone-300 text-sm font-medium rounded-md shadow-sm text-stone-700 bg-white hover:bg-stone-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 disabled:bg-stone-200 disabled:text-stone-500 disabled:cursor-not-allowed"
+                    >
+                        <ClipboardIcon className="w-5 h-5 mr-2" /> {copyStatus}
+                    </button>
+                    <button
+                        onClick={handleExportPDF}
+                        disabled={!markdownContent || isLoading || !!isExporting}
+                        className="flex items-center justify-center px-3 py-2 border border-stone-300 text-sm font-medium rounded-md shadow-sm text-stone-700 bg-white hover:bg-stone-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 disabled:bg-stone-200 disabled:text-stone-500 disabled:cursor-not-allowed"
+                    >
+                        {isExporting === 'pdf' ? 'Exporting...' : <><DownloadIcon className="w-5 h-5 mr-2" /> PDF</>}
+                    </button>
+                     <button
+                        onClick={onGenerate}
+                        disabled={isLoading || !!isExporting}
+                        className="ml-auto flex items-center justify-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 disabled:bg-indigo-300 disabled:cursor-not-allowed"
+                    >
+                        {isLoading ? (
+                            <>
+                                <svg className="animate-spin -ml-1 mr-3 h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                                </svg>
+                                Generating...
+                            </>
+                        ) : (
+                            <>
+                                <SparklesIcon className="w-5 h-5 mr-2" />
+                                Generate
+                            </>
+                        )}
+                    </button>
+                </div>
             </div>
         </div>
         
@@ -574,14 +710,57 @@ export const CVPreview: React.FC<CVPreviewProps> = ({ markdownContent, isLoading
                 selectedTemplate={selectedTemplate}
                 onTemplateChange={onTemplateChange}
             />
-             <PhotoAlignmentSelector
-                alignment={photoAlignment}
-                onChange={onPhotoAlignmentChange}
-            />
+             <div className='space-y-6'>
+                <OptionSelector
+                    label="Photo Alignment"
+                    options={[
+                        { id: 'left', label: 'Left' },
+                        { id: 'right', label: 'Right' },
+                        { id: 'none', label: 'None' },
+                    ]}
+                    selectedOption={photoAlignment}
+                    onChange={onPhotoAlignmentChange}
+                />
+                <OptionSelector
+                    label="Video Alignment"
+                    options={[
+                        { id: 'left', label: 'Left' },
+                        { id: 'right', label: 'Right' },
+                        { id: 'center', label: 'Center' },
+                        { id: 'full', label: 'Full Width' },
+                    ]}
+                    selectedOption={videoAlignment}
+                    onChange={onVideoAlignmentChange}
+                />
+                <OptionSelector
+                    label="Photo Size"
+                    options={[
+                        { id: 'small', label: 'Small' },
+                        { id: 'medium', label: 'Medium' },
+                        { id: 'large', label: 'Large' },
+                    ]}
+                    selectedOption={photoSize}
+                    onChange={onPhotoSizeChange}
+                />
+                <OptionSelector
+                    label="Video Size"
+                    options={[
+                        { id: 'small', label: 'Small' },
+                        { id: 'medium', label: 'Medium' },
+                        { id: 'large', label: 'Large' },
+                    ]}
+                    selectedOption={videoSize}
+                    onChange={onVideoSizeChange}
+                />
+                 <FontSelector
+                    selectedFontPair={fontPair}
+                    onChange={onFontPairChange}
+                />
+            </div>
         </div>
         
-        <div className={`template-${selectedTemplate}`}>
-            <div className="min-h-[600px] border rounded-lg p-4 bg-white shadow-inner">
+        <div className={`template-${selectedTemplate} font-pair-${fontPair} photo-size-${photoSize}`}>
+            <div className="min-h-[600px] border border-stone-200 rounded-lg p-4 bg-white shadow-inner">
                 {renderContent()}
             </div>
         </div>

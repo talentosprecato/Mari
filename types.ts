@@ -1,12 +1,24 @@
 
+
+export interface SocialLink {
+  id: string;
+  platform: string;
+  url: string;
+}
+
 export interface PersonalDetails {
   fullName: string;
   email: string;
   phone: string;
-  address: string;
+  dateOfBirth: string;
+  placeOfBirth: string;
+  residence: string;
   linkedin: string;
   website: string;
+  github: string;
+  twitter: string;
   photo: string;
+  socialLinks: SocialLink[];
 }
 
 export interface Experience {
@@ -45,6 +57,14 @@ export interface Certification {
   date: string;
 }
 
+export interface PortfolioItem {
+  id: string;
+  title: string;
+  link: string;
+  imageUrl: string;
+  description: string;
+}
+
 export interface CVData {
   personal: PersonalDetails;
   experience: Experience[];
@@ -52,17 +72,21 @@ export interface CVData {
   skills: string;
   projects: Project[];
   certifications: Certification[];
+  portfolio: PortfolioItem[];
   professionalNarrative: string;
   videoUrl: string;
+  signature: string;
 }
 
-export type SectionId = 'personal' | 'experience' | 'education' | 'skills' | 'projects' | 'certifications' | 'video' | 'professionalNarrative' | 'jobSearch';
+// FIX: Removed 'info' from SectionId as it is not a valid draggable CV section and was causing a type error.
+export type SectionId = 'personal' | 'experience' | 'education' | 'skills' | 'projects' | 'certifications' | 'portfolio' | 'professionalNarrative' | 'jobSearch' | 'coverLetter' | 'signature';
 
-export type CVDataFromAI = Omit<CVData, 'experience' | 'education' | 'projects' | 'certifications'> & {
+export type CVDataFromAI = Omit<CVData, 'experience' | 'education' | 'projects' | 'certifications' | 'portfolio'> & {
     experience: Omit<Experience, 'id'>[];
     education: Omit<Education, 'id'>[];
     projects: Omit<Project, 'id'>[];
     certifications: Omit<Certification, 'id'>[];
+    portfolio: Omit<PortfolioItem, 'id'>[];
 }
 
 export interface CompanyInfo {

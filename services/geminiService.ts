@@ -1,3 +1,5 @@
+
+
 import { GoogleGenAI, Type, LiveServerMessage, Modality } from "@google/genai";
 import { CVData, CVDataFromAI, SectionId, JobSuggestion } from "../types";
 
@@ -28,6 +30,17 @@ const templatePrompts: Record<string, string> = {
     |---|---|
     | ## Experience ... | ### Contact ... <br> ## Skills ... <br> ## Certifications ... |
 - **Style:** Professional and clean. Use headings within the table cells to delineate sections. The overall tone should be modern and efficient.`,
+  'two-column-creative': `
+- **Layout:** Use a two-column Markdown table.
+- **Structure:**
+    - The **left column** (narrower, ~35%) should contain: Personal contact details (email, phone, address, links), Skills, Certifications.
+    - The **right column** (wider, ~65%) should contain: The Full Name as a level 1 heading, a creative "Bio" or summary, Experience, Education, Projects.
+- **Header:** The Full Name should be a level 1 heading (#) at the top of the right column.
+- **Style:** Modern and creative. Use bold for emphasis and possibly subtle visual separators like '---' within the right column to break up long sections. The tone should be energetic and showcase personality.
+- **Example:**
+    | | |
+    |---|---|
+    | ### Contact ... <br> ## Skills ... <br> ## Certifications ... | # Jane Doe <br> > Creative Bio... <br><br> ## Experience ... |`,
   creative: `
 - **Layout:** Get creative with Markdown. You could suggest a two-column feel by using tables or other structures if it looks clean.
 - **Summary:** Instead of a formal summary, create a short, engaging "About Me" section (2-3 sentences).
@@ -69,16 +82,16 @@ const templatePrompts: Record<string, string> = {
 - **Style:** Avoid horizontal rules ('---') or any visual separators. The focus is purely on the content. The tone should be elegant, understated, and professional.`,
 };
 
-const languageConfig: Record<string, { name: string; narrativeHeading: string }> = {
-    en: { name: 'English', narrativeHeading: 'What has made you the professional you are today' },
-    it: { name: 'Italiano', narrativeHeading: 'Cosa ti ha reso il professionista che sei oggi' },
-    fr: { name: 'Français', narrativeHeading: 'Ce qui a fait de vous le professionnel que vous êtes aujourd\'hui' },
-    es: { name: 'Español', narrativeHeading: 'Qué te ha convertido en el profesional que eres hoy' },
-    pt: { name: 'Português', narrativeHeading: 'O que fez de você o profissional que é hoje' },
-    ru: { name: 'Русский', narrativeHeading: 'Что сделало вас тем профессионалом, которым вы являетесь сегодня' },
-    ar: { name: 'العربية', narrativeHeading: 'ما الذي جعلك المحترف الذي أنت عليه اليوم' },
-    'it-sal': { name: 'dialetto Salentino (Lecce)', narrativeHeading: 'Ce t\'ha fattu lu professionista ca si moi' },
-    'it-sic': { name: 'dialetto Siciliano', narrativeHeading: 'Cosa t\'ha fattu addivintari u prufissiunista ca si oggi' },
+const languageConfig: Record<string, { name: string; narrativeHeading: string; gdprConsent: string; }> = {
+    en: { name: 'English', narrativeHeading: 'What has made you the professional you are today', gdprConsent: 'I authorize the processing of my personal data contained in this CV in accordance with EU Regulation 2016/679 (GDPR), exclusively for personnel selection purposes.' },
+    it: { name: 'Italiano', narrativeHeading: 'Cosa ti ha reso il professionista che sei oggi', gdprConsent: 'Acconsento al trattamento dei miei dati personali contenuti nel presente curriculum vitae ai sensi del Regolamento UE 2016/679 (GDPR), esclusivamente per finalità di selezione del personale.' },
+    fr: { name: 'Français', narrativeHeading: 'Ce qui a fait de vous le professionnel que vous êtes aujourd\'hui', gdprConsent: 'J\'autorise le traitement de mes données personnelles contenues dans ce curriculum vitae conformément au Règlement UE 2016/679 (RGPD), exclusivement à des fins de sélection du personnel.' },
+    es: { name: 'Español', narrativeHeading: 'Qué te ha convertido en el profesional que eres hoy', gdprConsent: 'Autorizo el tratamiento de mis datos personales contenidos en este currículum vitae de conformidad con el Reglamento de la UE 2016/679 (RGPD), exclusivamente para fines de selección de personal.' },
+    pt: { name: 'Português', narrativeHeading: 'O que fez de você o profissional que é hoje', gdprConsent: 'Autorizo o tratamento dos meus dados pessoais contidos neste currículo vitae nos termos do Regulamento da UE 2016/679 (RGPD), exclusivamente para fins de seleção de pessoal.' },
+    ru: { name: 'Русский', narrativeHeading: 'Что сделало вас тем профессионалом, которым вы являетесь сегодня', gdprConsent: 'Я даю согласие на обработку моих персональных данных, содержащихся в этом резюме, в соответствии с Регламентом ЕС 2016/679 (GDPR) исключительно в целях отбора персонала.' },
+    ar: { name: 'العربية', narrativeHeading: 'ما الذي جعلك المحترف الذي أنت عليه اليوم', gdprConsent: 'أوافق على معالجة بياناتي الشخصية الواردة في هذه السيرة الذاتية وفقًا للائحة الاتحاد الأوروبي 2016/679 (GDPR)، وذلك لغرض اختيار الموظفين فقط.' },
+    'it-sal': { name: 'dialetto Salentino (Lecce)', narrativeHeading: 'Ce t\'ha fattu lu professionista ca si moi', gdprConsent: 'Tau lu cunsensu al trattamentu te li dati mei personali scritti \'ntra stu curriculum vitae comu dice lu Regolamentu UE 2016/679 (GDPR), sulu pe la selezione te lu personale.' },
+    'it-sic': { name: 'dialetto Siciliano', narrativeHeading: 'Cosa t\'ha fattu addivintari u prufissiunista ca si oggi', gdprConsent: 'Dugnu u cunsensu pû trattamentu di li me dati pirsunali ca su scritti \'nta stu curriculum vitae secunnu u Regolamentu UE 2016/679 (GDPR), sulu pi scopi di silizzioni di pirsunali.' },
 };
 
 
@@ -88,14 +101,14 @@ const buildPrompt = (data: CVData, templateId: string, sectionOrder: SectionId[]
   const capitalizedSectionNames = sectionOrder.map(s => {
     if (s === 'personal') return 'Personal Details';
     if (s === 'professionalNarrative') return 'Professional Narrative';
-    if (s === 'video') return 'Video Presentation';
-    if (s === 'jobSearch') return ''; // Don't include this in the CV itself
+    if (s === 'jobSearch' || s === 'portfolio' || s === 'signature') return ''; // Don't include these in the AI prompt section order
     return s.charAt(0).toUpperCase() + s.slice(1);
   }).filter(Boolean);
 
   const langConfig = languageConfig[language] || languageConfig['en'];
   const languageName = langConfig.name;
   const narrativeHeading = langConfig.narrativeHeading;
+  const gdprConsentText = langConfig.gdprConsent;
 
   let languageInstruction = `Generate the entire CV in **${languageName}**. All section headings (e.g., "Experience") and all content must be in this language.`;
   if (language === 'it-sal') {
@@ -105,10 +118,11 @@ const buildPrompt = (data: CVData, templateId: string, sectionOrder: SectionId[]
   }
   
   let photoInstruction = '';
+  const PHOTO_PLACEHOLDER = '--CV-PHOTO-PLACEHOLDER--';
   if (data.personal.photo && photoAlignment !== 'none') {
-      const contactInfo = [data.personal.email, data.personal.phone, data.personal.address, data.personal.linkedin, data.personal.website].filter(Boolean).join(' <br> ');
+      const contactInfo = [data.personal.email, data.personal.phone, data.personal.residence, data.personal.linkedin, data.personal.website].filter(Boolean).join(' <br> ');
       const headerText = `# ${data.personal.fullName} <br> ${contactInfo}`;
-      const photoMarkdown = `![Profile Photo](${data.personal.photo})`;
+      const photoMarkdown = `![Profile Photo](${PHOTO_PLACEHOLDER})`;
       
       const table = photoAlignment === 'right' 
         ? `| ${headerText} | ${photoMarkdown} |` 
@@ -124,13 +138,20 @@ ${table}
 `;
   }
 
-  // Create a copy of the data without the photo to avoid exceeding token limits in the JSON part of the prompt.
+  let signatureInstruction = '';
+  const SIGNATURE_PLACEHOLDER = '--CV-SIGNATURE-PLACEHOLDER--';
+  if (data.signature) {
+      signatureInstruction = `8.  **Signature:** At the very end of the CV, after all other content, create a new section with the heading \`## Signature\`. Below this heading, you MUST place the user's signature using this exact markdown: \`![Signature](${SIGNATURE_PLACEHOLDER})\``;
+  }
+
+  // Create a copy of the data without image data to avoid exceeding token limits in the JSON part of the prompt.
   const dataForPrompt = {
     ...data,
     personal: {
       ...data.personal,
       photo: data.personal.photo ? 'USER_PHOTO_PROVIDED' : '',
     },
+    signature: data.signature ? 'USER_SIGNATURE_PROVIDED' : '',
   };
 
 
@@ -144,15 +165,17 @@ ${photoInstruction}
 3.  **Adhere to the selected template style:**
     ${templateInstructions}
 4.  **Experience Section:** For each job, rewrite the responsibilities into 3-5 action-oriented bullet points. Start each point with a strong verb (e.g., "Engineered", "Managed", "Accelerated"). Quantify achievements with metrics wherever possible (e.g., "Increased user engagement by 15%").
-5.  **Professional Narrative Section:** If the 'professionalNarrative' field exists and is not empty, create a section with the heading "## ${narrativeHeading}" and place the user's text below it.
-6.  **Video Presentation Section:** If the 'videoUrl' field exists and is not empty, simply add a section with the heading "## Video Presentation" and the text "A video introduction is available and has been attached to this application." Do not try to render the URL.
+5.  **Personal Details:** In the contact information area, include all provided links (LinkedIn, Website, GitHub, Twitter, and the list in 'socialLinks'). Format them cleanly. For the 'socialLinks' array, create a single line of pipe-separated links, like: [Facebook](url) | [Instagram](url).
+6.  **Professional Narrative Section:** If the 'professionalNarrative' field exists and is not empty, create a section with the heading "## ${narrativeHeading}" and place the user's text below it.
 7.  **General Formatting:** Use standard Markdown for the entire output.
     *   Use a main heading (#) for the person's name (unless a photo is included, then follow the photo instructions).
     *   Use level two headings (##) for sections.
     *   Use bold for job titles and company names.
     *   Use italics for dates and locations.
 8.  **Tone:** Maintain a professional, confident, and polished tone throughout, matching the chosen template style and language.
-9.  **Output:** Only output the Markdown for the CV. Do not include any other commentary, introductory text, or the JSON data itself.
+${signatureInstruction || '9. **Signature:** No signature provided.'}
+10.  **Privacy Consent:** At the very bottom of the document, after everything else (including the signature), you MUST add the following privacy consent statement. Format it in small, italic text: *${gdprConsentText}*
+11. **Output:** Only output the Markdown for the CV. Do not include any other commentary, introductory text, or the JSON data itself.
 
 **User Data:**
 \`\`\`json
@@ -162,40 +185,38 @@ ${JSON.stringify(dataForPrompt, null, 2)}
 };
 
 
-export const generateCV = async (data: CVData, templateId: string, sectionOrder: SectionId[], language: string, photoAlignment: string): Promise<string> => {
+export async function* generateCV(
+    data: CVData, 
+    templateId: string, 
+    sectionOrder: SectionId[], 
+    language: string, 
+    photoAlignment: string
+): AsyncGenerator<string> {
     try {
         const PHOTO_PLACEHOLDER = '--CV-PHOTO-PLACEHOLDER--';
+        const SIGNATURE_PLACEHOLDER = '--CV-SIGNATURE-PLACEHOLDER--';
         const originalPhoto = data.personal.photo;
-        let dataForPrompt = data;
-
-        // If a photo exists, replace it with a placeholder for the prompt generation
-        // to avoid sending the large base64 string to the model.
-        if (originalPhoto) {
-            dataForPrompt = {
-                ...data,
-                personal: {
-                    ...data.personal,
-                    photo: PHOTO_PLACEHOLDER,
-                },
-            };
-        }
-
-        const prompt = buildPrompt(dataForPrompt, templateId, sectionOrder, language, photoAlignment);
-        const response = await ai.models.generateContent({
+        const originalSignature = data.signature;
+        
+        const prompt = buildPrompt(data, templateId, sectionOrder, language, photoAlignment);
+        
+        const responseStream = await ai.models.generateContentStream({
             model: 'gemini-2.5-pro',
             contents: prompt,
         });
         
-        let text = response.text;
-        if (text) {
-             // After getting the response, replace the placeholder with the original photo data.
-            if (originalPhoto) {
-                // Use a regular expression with the 'g' flag to replace all occurrences.
-                text = text.replace(new RegExp(PHOTO_PLACEHOLDER, 'g'), originalPhoto);
+        for await (const chunk of responseStream) {
+            let text = chunk.text;
+            if (text) {
+                // After getting the response, replace the placeholders with the original data.
+                if (originalPhoto) {
+                    text = text.replace(new RegExp(PHOTO_PLACEHOLDER, 'g'), originalPhoto);
+                }
+                if (originalSignature) {
+                    text = text.replace(new RegExp(SIGNATURE_PLACEHOLDER, 'g'), originalSignature);
+                }
+                yield text;
             }
-            return text;
-        } else {
-            throw new Error("Received an empty response from the API.");
         }
     } catch (error) {
         console.error("Error generating CV with Gemini API:", error);
@@ -207,13 +228,14 @@ export const generateVideoScript = async (data: CVData, language: string): Promi
     const langConfig = languageConfig[language] || languageConfig['en'];
     const languageName = langConfig.name;
 
-    // Exclude the photo from the data sent to the model to reduce token count.
+    // Exclude image data from the data sent to the model to reduce token count.
     const { photo, ...personalDetailsWithoutPhoto } = data.personal;
     const dataForPrompt = {
         personal: personalDetailsWithoutPhoto,
         experience: data.experience,
         projects: data.projects,
-        professionalNarrative: data.professionalNarrative
+        professionalNarrative: data.professionalNarrative,
+        signature: '', // Exclude signature from this prompt
     };
 
     const prompt = `
@@ -287,10 +309,24 @@ const cvDataSchema = {
                 fullName: { type: Type.STRING },
                 email: { type: Type.STRING },
                 phone: { type: Type.STRING },
-                address: { type: Type.STRING },
+                dateOfBirth: { type: Type.STRING, description: 'Format as YYYY-MM-DD' },
+                placeOfBirth: { type: Type.STRING },
+                residence: { type: Type.STRING },
                 linkedin: { type: Type.STRING },
                 website: { type: Type.STRING },
-                photo: { type: Type.STRING, description: 'A base64 encoded string of the user photo, if found.' },
+                github: { type: Type.STRING },
+                twitter: { type: Type.STRING },
+                photo: { type: Type.STRING, description: 'The photo field should always be an empty string, as images are not processed from files.' },
+                socialLinks: {
+                    type: Type.ARRAY,
+                    items: {
+                        type: Type.OBJECT,
+                        properties: {
+                            platform: { type: Type.STRING },
+                            url: { type: Type.STRING }
+                        }
+                    }
+                }
             },
             required: ['fullName', 'email']
         },
@@ -353,6 +389,19 @@ const cvDataSchema = {
                 required: ['name', 'issuingOrganization', 'date']
             }
         },
+        portfolio: {
+            type: Type.ARRAY,
+            items: {
+                type: Type.OBJECT,
+                properties: {
+                    title: { type: Type.STRING },
+                    link: { type: Type.STRING },
+                    imageUrl: { type: Type.STRING },
+                    description: { type: Type.STRING },
+                },
+                required: ['title', 'link', 'description']
+            }
+        },
         professionalNarrative: {
             type: Type.STRING,
             description: 'A paragraph or two describing the user\'s professional journey and philosophy.'
@@ -408,7 +457,6 @@ You are an expert CV parser and career coach. Your task is to analyze the follow
     *   For each work experience entry, rewrite the responsibilities into action-oriented bullet points (e.g., "Led a team..." instead of "Was responsible for leading...").
     *   If you find a summary, objective, or "About Me" section, place that content into the 'professionalNarrative' field.
     *   If you find a link to a video (e.g., Loom, YouTube), place the URL in the 'videoUrl' field.
-    *   Ensure the tone is professional and confident.
     *   Standardize date formats to YYYY-MM where possible. Use "Present" for ongoing roles.
     *   ${languageInstructionForParse}
 3.  **Structure Output:** Format the extracted and enhanced data strictly according to the provided JSON schema. Do not include any extra fields or text outside of the JSON object. Fill in fields with empty strings if no information is found. For array fields like experience, projects, etc., return an empty array if none are found. The 'photo' field in personal details should always be an empty string.
@@ -455,7 +503,8 @@ export const findJobOpportunities = async (cvData: CVData, cities: string, langu
         personal: personalDetailsWithoutPhoto,
         experience: cvData.experience,
         skills: cvData.skills,
-        projects: cvData.projects
+        projects: cvData.projects,
+        signature: '',
     };
 
     const prompt = `
@@ -506,7 +555,8 @@ export const draftCoverLetter = async (cvData: CVData, jobTitle: string, company
         experience: cvData.experience,
         skills: cvData.skills,
         projects: cvData.projects,
-        professionalNarrative: cvData.professionalNarrative
+        professionalNarrative: cvData.professionalNarrative,
+        signature: '',
     };
     
     const prompt = `
