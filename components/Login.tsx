@@ -1,7 +1,8 @@
 
+
 import React, { useState } from 'react';
-import { signInWithGoogle, signInWithFacebook, signUpWithEmail, logInWithEmail } from '../services/authService';
-import { GoogleIcon, FacebookIcon, SparklesIcon, MailIcon } from './icons';
+import { signInWithGoogle, signInWithFacebook, signUpWithEmail, logInWithEmail } from '../services/authService.ts';
+import { GoogleIcon, FacebookIcon, SparklesIcon, MailIcon } from './icons.tsx';
 
 const Login: React.FC = () => {
     const [email, setEmail] = useState('');

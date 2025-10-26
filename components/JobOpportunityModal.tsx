@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
-import { CVData, JobSuggestion } from '../types';
-import { findJobOpportunities, draftCoverLetter } from '../services/geminiService';
-import { BriefcaseIcon, MailIcon, XCircleIcon } from './icons';
+import { CVData, JobSuggestion } from '../types.ts';
+import { findJobOpportunities, draftCoverLetter } from '../services/geminiService.ts';
+import { BriefcaseIcon, MailIcon, XCircleIcon } from './icons.tsx';
 
 interface JobOpportunityModalProps {
   isOpen: boolean;

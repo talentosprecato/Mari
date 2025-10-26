@@ -1,6 +1,7 @@
 
+
 import React from 'react';
-import { SparklesIcon, UploadIcon, LanguageIcon, VideoPlusIcon, BriefcaseIcon, MailIcon, SignatureIcon, TypographyIcon, CoffeeIcon } from './icons';
+import { SparklesIcon, UploadIcon, LanguageIcon, VideoPlusIcon, BriefcaseIcon, MailIcon, SignatureIcon, TypographyIcon, CoffeeIcon } from './icons.tsx';
 
 interface AboutModalProps {
   isOpen: boolean;

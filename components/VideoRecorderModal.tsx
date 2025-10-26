@@ -1,8 +1,8 @@
 
 import React, { useState, useRef, useEffect, useCallback } from 'react';
-import { CVData } from '../types';
-import { generateVideoScript, startLiveTranscriptionSession } from '../services/geminiService';
-import { MagicWandIcon, CameraIcon } from './icons';
+import { CVData } from '../types.ts';
+import { generateVideoScript, startLiveTranscriptionSession } from '../services/geminiService.ts';
+import { MagicWandIcon, CameraIcon } from './icons.tsx';
 import type { LiveServerMessage, Blob as GenAI_Blob } from '@google/genai';
 
 interface VideoRecorderModalProps {

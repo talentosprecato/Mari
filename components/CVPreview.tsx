@@ -1,8 +1,8 @@
 import React, { useEffect, useState, useRef } from 'react';
-import { TemplateSelector } from './TemplateSelector';
-import { FontSelector } from './FontSelector';
-import { DownloadIcon, SparklesIcon, XCircleIcon, ClipboardIcon } from './icons';
-import { PortfolioItem } from '../types';
+import { TemplateSelector } from './TemplateSelector.tsx';
+import { FontSelector } from './FontSelector.tsx';
+import { DownloadIcon, SparklesIcon, XCircleIcon, ClipboardIcon } from './icons.tsx';
+import { PortfolioItem } from '../types.ts';
 
 // This is a global function from the 'marked' library loaded in index.html
 declare global {

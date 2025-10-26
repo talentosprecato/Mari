@@ -1,7 +1,7 @@
 
 
 import { GoogleGenAI, Type, LiveServerMessage } from "@google/genai";
-import { CVData, CVDataFromAI, SectionId, JobSuggestion } from "../types";
+import { CVData, CVDataFromAI, SectionId, JobSuggestion } from "../types.ts";
 
 const API_KEY = process.env.API_KEY;
 

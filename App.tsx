@@ -1,19 +1,19 @@
 
 import React, { useState, useCallback, useEffect } from 'react';
-import { CVForm } from './components/CVForm';
-import { CVPreview } from './components/CVPreview';
-import { useCVData } from './hooks/useCVData';
-import { generateCV, parseAndEnhanceCVFromFile } from './services/geminiService';
-import { CVData, SectionId } from './types';
-import { GithubIcon, SparklesIcon, CheckCircleIcon, XCircleIcon, InfoIcon, CoffeeIcon, LogoutIcon } from './components/icons';
-import { EnhancePreviewModal } from './components/EnhancePreviewModal';
-import { LanguageSelector } from './components/LanguageSelector';
-import { JobOpportunityModal } from './components/JobOpportunityModal';
-import { AboutModal } from './components/AboutModal';
-import { CoverLetterModal } from './components/CoverLetterModal';
-import { onAuthChange, logout } from './services/authService';
+import { CVForm } from './components/CVForm.tsx';
+import { CVPreview } from './components/CVPreview.tsx';
+import { useCVData } from './hooks/useCVData.ts';
+import { generateCV, parseAndEnhanceCVFromFile } from './services/geminiService.ts';
+import { CVData, SectionId } from './types.ts';
+import { GithubIcon, SparklesIcon, CheckCircleIcon, XCircleIcon, InfoIcon, CoffeeIcon, LogoutIcon } from './components/icons.tsx';
+import { EnhancePreviewModal } from './components/EnhancePreviewModal.tsx';
+import { LanguageSelector } from './components/LanguageSelector.tsx';
+import { JobOpportunityModal } from './components/JobOpportunityModal.tsx';
+import { AboutModal } from './components/AboutModal.tsx';
+import { CoverLetterModal } from './components/CoverLetterModal.tsx';
+import { onAuthChange, logout } from './services/authService.ts';
 import type { User } from 'firebase/auth';
-import Login from './components/Login';
+import Login from './components/Login.tsx';
 
 const SaveStatusIndicator: React.FC<{ status: 'idle' | 'saving' | 'saved' | 'error' }> = ({ status }) => {
     const visible = status !== 'idle';

@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
-import { CVData } from '../types';
-import { draftCoverLetter } from '../services/geminiService';
-import { MailIcon, XCircleIcon, SparklesIcon, ClipboardIcon } from './icons';
+import { CVData } from '../types.ts';
+import { draftCoverLetter } from '../services/geminiService.ts';
+import { MailIcon, XCircleIcon, SparklesIcon, ClipboardIcon } from './icons.tsx';
 
 interface CoverLetterModalProps {
   isOpen: boolean;

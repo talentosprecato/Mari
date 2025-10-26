@@ -1,8 +1,8 @@
 import React, { useRef, useState, useCallback } from 'react';
-import { CVData, PersonalDetails, Experience, Education, SectionId, Project, Certification, PortfolioItem, SocialLink } from '../types';
-import { PlusIcon, TrashIcon, SparklesIcon, DragHandleIcon, UploadIcon, FileIcon, XCircleIcon, RecordIcon, VideoPlusIcon, CameraIcon, BriefcaseIcon, CheckCircleIcon, SearchIcon, MailIcon, LinkIcon, FacebookIcon, InstagramIcon, TwitterIcon, GithubIcon } from './icons';
-import { VideoRecorderModal } from './VideoRecorderModal';
-import { SignaturePad } from './SignaturePad';
+import { CVData, PersonalDetails, Experience, Education, SectionId, Project, Certification, PortfolioItem, SocialLink } from '../types.ts';
+import { PlusIcon, TrashIcon, SparklesIcon, DragHandleIcon, UploadIcon, FileIcon, XCircleIcon, RecordIcon, VideoPlusIcon, CameraIcon, BriefcaseIcon, CheckCircleIcon, SearchIcon, MailIcon, LinkIcon, FacebookIcon, InstagramIcon, TwitterIcon, GithubIcon } from './icons.tsx';
+import { VideoRecorderModal } from './VideoRecorderModal.tsx';
+import { SignaturePad } from './SignaturePad.tsx';
 
 interface CVFormProps {
   cvData: CVData;
