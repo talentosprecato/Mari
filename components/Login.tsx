@@ -2,7 +2,7 @@
 
 import React, { useState } from 'react';
 import { signInWithGoogle, signInWithFacebook, signUpWithEmail, logInWithEmail } from '../services/authService.ts';
-import { GoogleIcon, FacebookIcon, SparklesIcon, MailIcon } from './icons.tsx';
+import { FacebookIcon, GoogleIcon, MailIcon, SparklesIcon } from './icons.tsx';
 import { getAuth, fetchSignInMethodsForEmail, GoogleAuthProvider } from 'firebase/auth';
 
 const Login: React.FC = () => {
@@ -14,9 +14,7 @@ const Login: React.FC = () => {
 
     const handleAuthError = (err: any) => {
         setLoading(false);
-        if (err.message && err.message.includes('Firebase configuration is missing')) {
-            setError('Authentication is not available at this time. Please contact support.');
-        } else if (err.code) {
+        if (err.code) {
             const friendlyMessage = err.code.replace('auth/', '').replace(/-/g, ' ');
             setError(friendlyMessage.charAt(0).toUpperCase() + friendlyMessage.slice(1) + '.');
         } else {

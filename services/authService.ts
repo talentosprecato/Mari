@@ -54,7 +54,7 @@ if (firebaseInitialized) {
     console.warn("Firebase configuration is missing from environment variables. Authentication will be disabled.");
 }
 
-const authNotConfiguredError = () => Promise.reject(new Error("Firebase authentication is not configured correctly. Please contact support. (Firebase configuration is missing)."));
+const authNotConfiguredError = () => Promise.reject(new Error("L'applicazione non è configurata correttamente per l'autenticazione. Contatta il supporto. (Firebase configuration is missing)."));
 
 export const signInWithGoogle = () => {
     if (!auth || !googleProvider) return authNotConfiguredError();

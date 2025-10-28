@@ -5,15 +5,12 @@ import { CVPreview } from './components/CVPreview.tsx';
 import { useCVData } from './hooks/useCVData.ts';
 import { generateCV, parseAndEnhanceCVFromFile } from './services/geminiService.ts';
 import { CVData, SectionId } from './types.ts';
-import { GithubIcon, SparklesIcon, CheckCircleIcon, XCircleIcon, InfoIcon, CoffeeIcon, LogoutIcon } from './components/icons.tsx';
+import { GithubIcon, SparklesIcon, CheckCircleIcon, XCircleIcon, InfoIcon, CoffeeIcon } from './components/icons.tsx';
 import { EnhancePreviewModal } from './components/EnhancePreviewModal.tsx';
 import { LanguageSelector } from './components/LanguageSelector.tsx';
 import { JobOpportunityModal } from './components/JobOpportunityModal.tsx';
 import { AboutModal } from './components/AboutModal.tsx';
 import { CoverLetterModal } from './components/CoverLetterModal.tsx';
-import { onAuthChange, logout } from './services/authService.ts';
-import type { User } from 'firebase/auth';
-import Login from './components/Login.tsx';
 
 const SaveStatusIndicator: React.FC<{ status: 'idle' | 'saving' | 'saved' | 'error' }> = ({ status }) => {
     const visible = status !== 'idle';
@@ -105,18 +102,6 @@ const App: React.FC = () => {
   const [isCoverLetterModalOpen, setIsCoverLetterModalOpen] = useState(false);
   const [isAboutModalOpen, setIsAboutModalOpen] = useState(false);
 
-  const [user, setUser] = useState<User | null>(null);
-  const [authLoading, setAuthLoading] = useState(true);
-
-  useEffect(() => {
-    const unsubscribe = onAuthChange((user) => {
-        setUser(user);
-        setAuthLoading(false);
-    });
-    return () => unsubscribe(); // Cleanup subscription on component unmount
-  }, []);
-
-
   const handleGenerateCV = useCallback(async () => {
     setIsLoading(true);
     setError(null);
@@ -171,11 +156,7 @@ const App: React.FC = () => {
         setShowEnhancePreviewModal(true);
 
     } catch (e) {
-        if (e instanceof Error && e.message.includes("API key")) {
-            setError('Failed to enhance CV. Please check your API key configuration.');
-        } else {
-            setError('Failed to parse and enhance CV. The AI could not understand the format or the file may be corrupt. Please try again.');
-        }
+        setError('Failed to parse and enhance CV. The AI could not understand the format. Please try again with a different file.');
         console.error(e);
     } finally {
         setIsEnhancing(false);
@@ -196,24 +177,6 @@ const App: React.FC = () => {
     setPendingEnhancedData(null);
     setEnhancedPreviewMd('');
   };
-
-  if (authLoading) {
-    return (
-        <div className="min-h-screen flex items-center justify-center bg-stone-50">
-            <div className="flex flex-col items-center justify-center space-y-2 text-stone-500">
-                <svg className="animate-spin h-8 w-8" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                </svg>
-                <span>Loading...</span>
-            </div>
-        </div>
-    );
-  }
-
-  if (!user) {
-    return <Login />;
-  }
 
   return (
     <div className="min-h-screen text-stone-800 font-sans flex flex-col">
@@ -237,12 +200,6 @@ const App: React.FC = () => {
                 <a href="https://github.com/google/generative-ai-docs/tree/main/site/en/gemini-api/docs/applications/web" target="_blank" rel="noopener noreferrer" className="text-stone-500 hover:text-stone-900">
                     <GithubIcon className="w-7 h-7" />
                 </a>
-                <div className="border-l border-stone-300 pl-4 flex items-center space-x-3">
-                    <span className="text-sm text-stone-600 hidden sm:block">{user.email}</span>
-                    <button onClick={logout} className="text-stone-500 hover:text-stone-900" aria-label="Logout">
-                        <LogoutIcon className="w-7 h-7" />
-                    </button>
-                </div>
             </div>
           </div>
         </div>
