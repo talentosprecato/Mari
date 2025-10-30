@@ -1,5 +1,5 @@
 {
-  "name": "veravox-ai-cv-editor",
+  "name": "veravox-ai-cv-editor-for-you",
   "private": true,
   "version": "0.0.0",
   "type": "module",
@@ -11,8 +11,7 @@
   "dependencies": {
     "@google/genai": "^1.27.0",
     "react": "^19.2.0",
-    "react-dom": "^19.2.0",
-    "firebase": "^12.4.0"
+    "react-dom": "^19.2.0"
   },
   "devDependencies": {
     "@types/node": "^22.14.0",

@@ -1,8 +1,7 @@
-
 import React, { useState, useRef, useEffect, useCallback } from 'react';
-import { CVData } from '../types.ts';
-import { generateVideoScript, startLiveTranscriptionSession } from '../services/geminiService.ts';
-import { MagicWandIcon, CameraIcon } from './icons.tsx';
+import { CVData } from '../types';
+import { generateVideoScript, startLiveTranscriptionSession } from '../services/geminiService';
+import { MagicWandIcon } from './icons';
 import type { LiveServerMessage, Blob as GenAI_Blob } from '@google/genai';
 
 interface VideoRecorderModalProps {
@@ -108,7 +107,6 @@ export const VideoRecorderModal: React.FC<VideoRecorderModalProps> = ({ isOpen, 
   const [activeTab, setActiveTab] = useState<'filters' | 'overlays'>('filters');
   const [isSubtitlesEnabled, setIsSubtitlesEnabled] = useState(true);
   const [subtitles, setSubtitles] = useState('');
-  const [permissionsGranted, setPermissionsGranted] = useState(false);
   
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -216,7 +214,6 @@ export const VideoRecorderModal: React.FC<VideoRecorderModalProps> = ({ isOpen, 
     try {
       const mediaStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
       setStream(mediaStream);
-      setPermissionsGranted(true);
 
       if (videoRef.current) {
         videoRef.current.srcObject = mediaStream;
@@ -274,7 +271,6 @@ export const VideoRecorderModal: React.FC<VideoRecorderModalProps> = ({ isOpen, 
         }
       }
       setError(message);
-      setPermissionsGranted(false);
     }
   }, [isSubtitlesEnabled, language, drawVideoOnCanvas]);
 
@@ -304,29 +300,28 @@ export const VideoRecorderModal: React.FC<VideoRecorderModalProps> = ({ isOpen, 
       cancelAnimationFrame(animationFrameIdRef.current);
       animationFrameIdRef.current = null;
     }
-    setPermissionsGranted(false);
   }, [stream]);
 
-  const resetComponentState = useCallback(() => {
-    stopMedia();
-    setIsRecording(false);
-    setRecordedBlob(null);
-    if (countdownIntervalRef.current) clearInterval(countdownIntervalRef.current);
-    setCountdown(60);
-    setScript(null);
-    setSelectedFilter('none');
-    setSelectedOverlay('none');
-    setError(null);
-    stopScroll();
-    setPermissionsGranted(false);
-  }, [stopMedia, stopScroll]);
-
   useEffect(() => {
-    if (!isOpen) {
-      resetComponentState();
+    if (isOpen) {
+      startMedia();
+    } else {
+      stopMedia();
+      setIsRecording(false);
+      setRecordedBlob(null);
+      if (countdownIntervalRef.current) clearInterval(countdownIntervalRef.current);
+      setCountdown(60);
+      setScript(null);
+      setSelectedFilter('none');
+      setSelectedOverlay('none');
+      setError(null);
+      stopScroll();
     }
-  }, [isOpen, resetComponentState]);
-  
+    return () => {
+        stopMedia();
+        stopScroll();
+    };
+  }, [isOpen, startMedia, stopMedia, stopScroll]);
 
   const startScroll = useCallback(() => {
     if (script && teleprompterRef.current) {
@@ -437,21 +432,6 @@ export const VideoRecorderModal: React.FC<VideoRecorderModalProps> = ({ isOpen, 
   
   const videoSrc = recordedBlob ? URL.createObjectURL(recordedBlob) : undefined;
 
-  const renderPermissionsRequest = () => (
-    <div className="absolute inset-0 bg-stone-800 flex flex-col items-center justify-center text-white p-8 text-center z-20">
-        <CameraIcon className="w-16 h-16 text-indigo-400 mb-4" />
-        <h3 className="text-xl font-bold mb-2">Enable Camera & Microphone</h3>
-        <p className="text-stone-300 mb-6 max-w-sm">To record your video presentation, we need access to your camera and microphone. We'll only use them for the recording session.</p>
-        <button 
-            onClick={startMedia}
-            className="px-6 py-3 border border-transparent rounded-md text-base font-medium text-white bg-indigo-600 hover:bg-indigo-700"
-        >
-            Enable Camera & Microphone
-        </button>
-         {error && <p className="mt-4 text-sm text-red-400">{error}</p>}
-    </div>
-  );
-
   return (
     <div className="fixed inset-0 bg-gray-600 bg-opacity-75 flex items-center justify-center z-50 p-4">
       <div className="bg-white rounded-lg shadow-xl w-full max-w-2xl flex flex-col transform transition-all duration-300 scale-95 opacity-0 animate-fade-in-scale">
@@ -461,33 +441,35 @@ export const VideoRecorderModal: React.FC<VideoRecorderModalProps> = ({ isOpen, 
         </header>
         <main className="p-6">
             <div className="relative w-full aspect-video bg-black rounded-md overflow-hidden shadow-inner">
-                 {!permissionsGranted && renderPermissionsRequest()}
-                 {permissionsGranted && error && (
+                 {error ? (
                     <div className="absolute inset-0 bg-stone-800 flex flex-col items-center justify-center text-white p-8 text-center z-10">
                         <p className="text-lg font-semibold mb-2 text-indigo-400">Recording Unavailable</p>
                         <p>{error}</p>
                     </div>
+                 ) : (
+                    <>
+                         <video ref={videoRef} autoPlay muted playsInline className="absolute w-full h-full object-cover opacity-0 pointer-events-none"></video>
+                         <canvas ref={canvasRef} className={`w-full h-full object-cover transition-opacity duration-300 ${recordedBlob ? 'opacity-0' : 'opacity-100'}`}></canvas>
+                         <div className={`absolute inset-0 pointer-events-none overlay-${selectedOverlay}`}></div>
+                         {recordedBlob && <video key={videoSrc} src={videoSrc} controls autoPlay playsInline className="w-full h-full object-cover"></video>}
+                         {isRecording && <div className="absolute top-4 right-4 text-white bg-indigo-600 rounded-full px-3 py-1 text-sm font-bold animate-pulse">REC</div>}
+                         {isRecording && <div className="absolute bottom-4 left-4 text-white bg-black/50 rounded-md px-2 py-1 text-sm">0:{String(countdown).padStart(2, '0')}</div>}
+                         
+                         {isRecording && script && script.trim() !== '' && (
+                            <div className="absolute inset-0 bg-black/60 p-8 flex items-center justify-center overflow-hidden pointer-events-none">
+                                <div ref={teleprompterRef} className="w-full max-w-lg h-full overflow-y-scroll scrollbar-hide">
+                                    <p className="text-white text-2xl leading-relaxed font-semibold whitespace-pre-wrap text-center">
+                                        {script}
+                                    </p>
+                                </div>
+                            </div>
+                        )}
+                    </>
                  )}
-                 <video ref={videoRef} autoPlay muted playsInline className="absolute w-full h-full object-cover opacity-0 pointer-events-none"></video>
-                 <canvas ref={canvasRef} className={`w-full h-full object-cover transition-opacity duration-300 ${recordedBlob || !permissionsGranted ? 'opacity-0' : 'opacity-100'}`}></canvas>
-                 <div className={`absolute inset-0 pointer-events-none overlay-${selectedOverlay}`}></div>
-                 {recordedBlob && <video key={videoSrc} src={videoSrc} controls autoPlay playsInline className="w-full h-full object-cover"></video>}
-                 {isRecording && <div className="absolute top-4 right-4 text-white bg-indigo-600 rounded-full px-3 py-1 text-sm font-bold animate-pulse">REC</div>}
-                 {isRecording && <div className="absolute bottom-4 left-4 text-white bg-black/50 rounded-md px-2 py-1 text-sm">0:{String(countdown).padStart(2, '0')}</div>}
-                 
-                 {isRecording && script && script.trim() !== '' && (
-                    <div className="absolute inset-0 bg-black/60 p-8 flex items-center justify-center overflow-hidden pointer-events-none">
-                        <div ref={teleprompterRef} className="w-full max-w-lg h-full overflow-y-scroll scrollbar-hide">
-                            <p className="text-white text-2xl leading-relaxed font-semibold whitespace-pre-wrap text-center">
-                                {script}
-                            </p>
-                        </div>
-                    </div>
-                )}
             </div>
         </main>
 
-        {permissionsGranted && !recordedBlob && (
+        {!recordedBlob && (
         <div className="px-6 pb-4 border-b space-y-4">
             <div>
                 <h4 className="text-sm font-medium text-stone-700 mb-2">Video Effects</h4>
@@ -595,7 +577,7 @@ export const VideoRecorderModal: React.FC<VideoRecorderModalProps> = ({ isOpen, 
                         <div className='self-end'>
                              <button 
                                 onClick={handleGenerateScript}
-                                disabled={isGeneratingScript || error || !permissionsGranted}
+                                disabled={isGeneratingScript || !!error}
                                 className="w-full h-full flex items-center justify-center px-4 py-2 border border-stone-300 text-sm font-medium rounded-md shadow-sm text-stone-700 bg-white hover:bg-stone-50 disabled:bg-stone-200 disabled:cursor-not-allowed"
                             >
                                 {isGeneratingScript ? (
@@ -618,7 +600,7 @@ export const VideoRecorderModal: React.FC<VideoRecorderModalProps> = ({ isOpen, 
 
          <footer className="p-4 bg-stone-50 flex justify-between items-center">
           <div>
-            {!isRecording && !recordedBlob && permissionsGranted && <span className="text-sm text-stone-500">Max 60 seconds.</span>}
+            {!isRecording && !recordedBlob && <span className="text-sm text-stone-500">Max 60 seconds.</span>}
           </div>
           <div className="flex space-x-4">
             {isRecording ? (
@@ -633,7 +615,7 @@ export const VideoRecorderModal: React.FC<VideoRecorderModalProps> = ({ isOpen, 
                     <button onClick={onClose} className="px-4 py-2 border border-stone-300 rounded-md text-sm font-medium text-stone-700 hover:bg-stone-100">Cancel</button>
                     <button 
                         onClick={handleStartRecording} 
-                        disabled={!stream || !!error || !permissionsGranted}
+                        disabled={!stream || !!error}
                         className="px-6 py-2 border border-transparent rounded-md text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700 disabled:bg-indigo-300 disabled:cursor-not-allowed"
                     >Record</button>
                 </>

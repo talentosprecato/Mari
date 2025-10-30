@@ -1,8 +1,8 @@
 import React, { useEffect, useState, useRef } from 'react';
-import { TemplateSelector } from './TemplateSelector.tsx';
-import { FontSelector } from './FontSelector.tsx';
-import { DownloadIcon, SparklesIcon, XCircleIcon, ClipboardIcon } from './icons.tsx';
-import { PortfolioItem } from '../types.ts';
+import { TemplateSelector } from './TemplateSelector';
+import { FontSelector } from './FontSelector';
+import { DownloadIcon, SparklesIcon, XCircleIcon } from './icons';
+import { PortfolioItem } from '../types';
 
 // This is a global function from the 'marked' library loaded in index.html
 declare global {
@@ -528,7 +528,6 @@ export const CVPreview: React.FC<CVPreviewProps> = ({
   const [htmlContent, setHtmlContent] = useState('');
   const [isExporting, setIsExporting] = useState<false | 'pdf'>(false);
   const [exportError, setExportError] = useState<string | null>(null);
-  const [copyStatus, setCopyStatus] = useState('Copy');
   const previewRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -546,18 +545,6 @@ export const CVPreview: React.FC<CVPreviewProps> = ({
       return () => clearTimeout(timer);
     }
   }, [exportError]);
-
-  const handleCopyMarkdown = () => {
-    if (!markdownContent) return;
-    navigator.clipboard.writeText(markdownContent).then(() => {
-        setCopyStatus('Copied!');
-        setTimeout(() => setCopyStatus('Copy'), 2000);
-    }).catch(err => {
-        console.error('Failed to copy text: ', err);
-        setCopyStatus('Error');
-        setTimeout(() => setCopyStatus('Copy'), 2000);
-    });
-  };
 
   const handleExportPDF = async () => {
     if (!previewRef.current || !markdownContent) return;
@@ -660,13 +647,6 @@ export const CVPreview: React.FC<CVPreviewProps> = ({
             <h2 className="text-2xl font-bold text-stone-900">CV Preview</h2>
             <div className='w-full'>
                 <div className="flex items-center space-x-2">
-                     <button
-                        onClick={handleCopyMarkdown}
-                        disabled={!markdownContent || isLoading || !!isExporting}
-                        className="flex items-center justify-center px-3 py-2 border border-stone-300 text-sm font-medium rounded-md shadow-sm text-stone-700 bg-white hover:bg-stone-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 disabled:bg-stone-200 disabled:text-stone-500 disabled:cursor-not-allowed"
-                    >
-                        <ClipboardIcon className="w-5 h-5 mr-2" /> {copyStatus}
-                    </button>
                     <button
                         onClick={handleExportPDF}
                         disabled={!markdownContent || isLoading || !!isExporting}

@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
-import { CVData } from '../types.ts';
-import { draftCoverLetter } from '../services/geminiService.ts';
-import { MailIcon, XCircleIcon, SparklesIcon, ClipboardIcon } from './icons.tsx';
+import { CVData } from '../types';
+import { draftCoverLetter } from '../services/geminiService';
+import { MailIcon, XCircleIcon, SparklesIcon } from './icons';
 
 interface CoverLetterModalProps {
   isOpen: boolean;
@@ -33,7 +33,6 @@ export const CoverLetterModal: React.FC<CoverLetterModalProps> = ({ isOpen, onCl
     const [isLoading, setIsLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [draft, setDraft] = useState('');
-    const [copyStatus, setCopyStatus] = useState('Copy');
 
     const resetState = () => {
         setJobTitle('');
@@ -41,7 +40,6 @@ export const CoverLetterModal: React.FC<CoverLetterModalProps> = ({ isOpen, onCl
         setIsLoading(false);
         setError(null);
         setDraft('');
-        setCopyStatus('Copy');
     };
 
     const handleClose = () => {
@@ -71,18 +69,6 @@ export const CoverLetterModal: React.FC<CoverLetterModalProps> = ({ isOpen, onCl
         return `mailto:?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
     };
 
-    const handleCopy = () => {
-        const fullText = `Dear Hiring Manager at ${companyName},\n\n${draft}\n\nSincerely,\n${cvData.personal.fullName}`;
-        navigator.clipboard.writeText(fullText).then(() => {
-            setCopyStatus('Copied!');
-            setTimeout(() => setCopyStatus('Copy'), 2000);
-        }).catch(err => {
-            console.error('Failed to copy text: ', err);
-            setCopyStatus('Error');
-            setTimeout(() => setCopyStatus('Copy'), 2000);
-        });
-    };
-
     const renderContent = () => {
         if (draft) {
             return (
@@ -100,13 +86,6 @@ export const CoverLetterModal: React.FC<CoverLetterModalProps> = ({ isOpen, onCl
                         className="w-full text-sm px-3 py-2 border border-stone-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500 bg-white/50"
                     />
                     <div className="flex space-x-3">
-                        <button
-                            onClick={handleCopy}
-                            className="flex-1 flex items-center justify-center px-4 py-2 border border-stone-300 text-sm font-medium rounded-md shadow-sm text-stone-700 bg-white hover:bg-stone-50"
-                        >
-                            <ClipboardIcon className="w-5 h-5 mr-2" />
-                            {copyStatus}
-                        </button>
                         <a
                             href={createMailtoLink()}
                             target="_blank"

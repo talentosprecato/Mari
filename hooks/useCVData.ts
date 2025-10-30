@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { CVData, PersonalDetails, Experience, Education, Project, Certification, PortfolioItem, SocialLink } from '../types.ts';
+import { CVData, PersonalDetails, Experience, Education, Project, Certification, PortfolioItem, SocialLink } from '../types';
 
 const initialCVData: CVData = {
   personal: {

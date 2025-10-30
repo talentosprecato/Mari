@@ -1,8 +1,8 @@
 import React, { useRef, useState, useCallback } from 'react';
-import { CVData, PersonalDetails, Experience, Education, SectionId, Project, Certification, PortfolioItem, SocialLink } from '../types.ts';
-import { PlusIcon, TrashIcon, SparklesIcon, DragHandleIcon, UploadIcon, FileIcon, XCircleIcon, RecordIcon, VideoPlusIcon, CameraIcon, BriefcaseIcon, CheckCircleIcon, SearchIcon, MailIcon, LinkIcon, FacebookIcon, InstagramIcon, TwitterIcon, GithubIcon } from './icons.tsx';
-import { VideoRecorderModal } from './VideoRecorderModal.tsx';
-import { SignaturePad } from './SignaturePad.tsx';
+import { CVData, PersonalDetails, Experience, Education, SectionId, Project, Certification, PortfolioItem, SocialLink } from '../types';
+import { PlusIcon, TrashIcon, SparklesIcon, DragHandleIcon, UploadIcon, FileIcon, XCircleIcon, RecordIcon, VideoPlusIcon, CameraIcon, BriefcaseIcon, CheckCircleIcon, SearchIcon, MailIcon, LinkIcon, FacebookIcon, InstagramIcon, TwitterIcon, GithubIcon } from './icons';
+import { VideoRecorderModal } from './VideoRecorderModal';
+import { SignaturePad } from './SignaturePad';
 
 interface CVFormProps {
   cvData: CVData;
@@ -858,7 +858,7 @@ export const CVForm: React.FC<CVFormProps> = ({
             <SparklesIcon className="w-6 h-6 text-indigo-600" />
             <h3 className="text-xl font-semibold text-stone-800">Enhance with AI</h3>
         </div>
-        <p className="text-sm text-stone-600">Have an existing CV? Upload a PDF or text file, and let AI parse and populate the form for you.</p>
+        <p className="text-sm text-stone-600">Have an existing CV? Upload a PDF file, and let AI parse and populate the form for you.</p>
         <div className="flex flex-col sm:flex-row sm:items-center sm:space-x-3 space-y-2 sm:space-y-0">
              <div className="flex-1">
                 <label htmlFor="file-upload" className="sr-only">Choose file</label>
@@ -871,7 +871,7 @@ export const CVForm: React.FC<CVFormProps> = ({
                         Browse
                     </div>
                     <div className="relative flex-1">
-                        <input type="file" ref={fileInputRef} onChange={handleFileChange} accept=".pdf,.txt" className="sr-only" id="file-upload" />
+                        <input type="file" ref={fileInputRef} onChange={handleFileChange} accept=".pdf" className="sr-only" id="file-upload" />
                         <div className="block w-full px-3 py-2 border border-stone-300 rounded-r-md text-sm text-stone-700 truncate bg-white/50">
                             {selectedFile ? (
                                 <span className='flex items-center'>
