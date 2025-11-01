@@ -522,6 +522,7 @@ export const CVForm: React.FC<CVFormProps> = ({
                         <div className="mt-2 text-xs text-stone-500">
                             Or{' '}
                             <button onClick={() => setIsVideoRecorderOpen(true)} className="text-indigo-600 hover:underline">record a new one</button>.
+                            <p className="italic mt-1">Note: Uploaded or recorded videos are not saved between sessions. Please use a permanent link for persistence.</p>
                         </div>
                     </div>
                 </div>

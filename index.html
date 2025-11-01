@@ -24,7 +24,13 @@
 </script>
 <style>
   body {
-    background-color: #f5f3ff; /* soft violet */
+    background-color: #eef2ff; /* A soft, light blue-indigo as a fallback */
+    background-image:
+        radial-gradient(at 20% 25%, hsla(220, 80%, 90%, 1) 0px, transparent 50%),
+        radial-gradient(at 80% 20%, hsla(280, 80%, 92%, 1) 0px, transparent 50%),
+        radial-gradient(at 25% 85%, hsla(320, 70%, 94%, 1) 0px, transparent 50%),
+        radial-gradient(at 75% 90%, hsla(200, 75%, 90%, 1) 0px, transparent 50%);
+    background-attachment: fixed;
   }
 </style>
 </head>

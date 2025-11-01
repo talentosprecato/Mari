@@ -81,10 +81,23 @@ export const useCVData = () => {
       const savedData = localStorage.getItem(LOCAL_STORAGE_KEY);
       if (savedData) {
         const parsed = JSON.parse(savedData);
-        // Basic validation to ensure the loaded data has the expected structure
-        if (parsed.personal && parsed.experience && parsed.education && parsed.projects && parsed.certifications && parsed.portfolio && typeof parsed.signature !== 'undefined') {
+        // Basic validation and data migration for robustness
+        if (parsed.personal) {
+            // Ensure all array items have IDs for robust key handling
+            ['experience', 'education', 'projects', 'certifications', 'portfolio'].forEach(key => {
+                if (parsed[key] && Array.isArray(parsed[key])) {
+                    parsed[key].forEach((item: any) => {
+                        if (!item.id) item.id = crypto.randomUUID();
+                    });
+                }
+            });
+            if (parsed.personal?.socialLinks && Array.isArray(parsed.personal.socialLinks)) {
+                parsed.personal.socialLinks.forEach((item: any) => {
+                    if (!item.id) item.id = crypto.randomUUID();
+                });
+            }
+
             const dataWithDefaults = { ...initialCVData, ...parsed };
-            // Ensure nested objects and arrays exist
             dataWithDefaults.personal = { ...initialCVData.personal, ...parsed.personal };
             if (!dataWithDefaults.personal.socialLinks) {
                 dataWithDefaults.personal.socialLinks = [];
@@ -110,7 +123,12 @@ export const useCVData = () => {
     setSaveStatus('saving');
     const handler = setTimeout(() => {
         try {
-            localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(cvData));
+            const dataToSave = { ...cvData };
+            // Do not save temporary blob URLs to localStorage as they are session-specific
+            if (dataToSave.videoUrl && dataToSave.videoUrl.startsWith('blob:')) {
+                dataToSave.videoUrl = '';
+            }
+            localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(dataToSave));
             setSaveStatus('saved');
         } catch (error) {
             console.error("Failed to save CV data to localStorage", error);

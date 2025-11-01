@@ -1,10 +1,11 @@
+
 import React, { useState, useCallback } from 'react';
 import { CVForm } from './components/CVForm';
 import { CVPreview } from './components/CVPreview';
 import { useCVData } from './hooks/useCVData';
 import { generateCV, parseAndEnhanceCVFromFile } from './services/geminiService';
-import { CVData, SectionId } from './types';
-import { GithubIcon, SparklesIcon, CheckCircleIcon, XCircleIcon, InfoIcon, CoffeeIcon } from './components/icons';
+import { CVData, SectionId, SectionStyles, SectionStyle } from './types';
+import { GithubIcon, SparklesIcon, CheckCircleIcon, XCircleIcon, InfoIcon, CoffeeIcon, LadybugIcon } from './components/icons';
 import { EnhancePreviewModal } from './components/EnhancePreviewModal';
 import { LanguageSelector } from './components/LanguageSelector';
 import { JobOpportunityModal } from './components/JobOpportunityModal';
@@ -43,6 +44,15 @@ const SaveStatusIndicator: React.FC<{ status: 'idle' | 'saving' | 'saved' | 'err
             <span>{currentStatus.text}</span>
         </div>
     );
+};
+
+const defaultSectionStyles: SectionStyles = {
+  experience: { border: 'full', backgroundColor: 'transparent', spacing: 'medium' },
+  education: { border: 'full', backgroundColor: 'transparent', spacing: 'medium' },
+  skills: { border: 'full', backgroundColor: 'transparent', spacing: 'medium' },
+  projects: { border: 'full', backgroundColor: 'transparent', spacing: 'medium' },
+  certifications: { border: 'full', backgroundColor: 'transparent', spacing: 'medium' },
+  professionalNarrative: { border: 'full', backgroundColor: 'transparent', spacing: 'medium' },
 };
 
 const App: React.FC = () => {
@@ -91,7 +101,7 @@ const App: React.FC = () => {
   const [videoSize, setVideoSize] = useState<'small' | 'medium' | 'large'>('medium');
   const [fontPair, setFontPair] = useState<string>('inter-lora');
   const [sections, setSections] = useState<SectionId[]>(['personal', 'experience', 'education', 'skills', 'projects', 'portfolio', 'certifications', 'professionalNarrative', 'signature', 'coverLetter', 'jobSearch']);
-  const [language, setLanguage] = useState('en');
+  const [language, setLanguage] = useState('it');
   
   const [isEnhancing, setIsEnhancing] = useState(false);
   const [showEnhancePreviewModal, setShowEnhancePreviewModal] = useState(false);
@@ -100,6 +110,7 @@ const App: React.FC = () => {
   const [isJobModalOpen, setIsJobModalOpen] = useState(false);
   const [isCoverLetterModalOpen, setIsCoverLetterModalOpen] = useState(false);
   const [isAboutModalOpen, setIsAboutModalOpen] = useState(false);
+  const [sectionStyles, setSectionStyles] = useState<SectionStyles>(defaultSectionStyles);
 
 
   const handleGenerateCV = useCallback(async () => {
@@ -176,6 +187,16 @@ const App: React.FC = () => {
     setEnhancedPreviewMd('');
   };
 
+  const handleSectionStyleChange = (sectionId: keyof SectionStyles, field: keyof SectionStyle, value: string) => {
+    setSectionStyles(prev => ({
+        ...prev,
+        [sectionId]: {
+            ...prev[sectionId],
+            [field]: value,
+        }
+    }));
+  };
+
 
   return (
     <div className="min-h-screen text-stone-800 font-sans flex flex-col">
@@ -183,7 +204,7 @@ const App: React.FC = () => {
         <div className="container mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between items-center py-4">
             <div className="flex items-center space-x-3">
-                <SparklesIcon className="w-8 h-8 text-indigo-600" />
+                <LadybugIcon className="w-8 h-8" />
                 <h1 className="text-2xl font-bold text-stone-900 tracking-tight">Veravox AI CV Editor for you</h1>
                 <SaveStatusIndicator status={saveStatus} />
             </div>
@@ -260,6 +281,8 @@ const App: React.FC = () => {
           portfolio={cvData.portfolio}
           fontPair={fontPair}
           onFontPairChange={setFontPair}
+          sectionStyles={sectionStyles}
+          onSectionStyleChange={handleSectionStyleChange}
         />
       </main>
 

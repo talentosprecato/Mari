@@ -98,3 +98,16 @@ export interface JobSuggestion {
   jobTitle: string;
   companies: CompanyInfo[];
 }
+
+export type BorderStyle = 'none' | 'top' | 'bottom' | 'full';
+export type SpacingStyle = 'small' | 'medium' | 'large';
+
+export interface SectionStyle {
+  border: BorderStyle;
+  backgroundColor: string; // hex color or 'transparent'
+  spacing: SpacingStyle;
+}
+
+export type StylableSection = Exclude<SectionId, 'personal' | 'jobSearch' | 'coverLetter' | 'signature' | 'portfolio'>;
+
+export type SectionStyles = Record<StylableSection, SectionStyle>;

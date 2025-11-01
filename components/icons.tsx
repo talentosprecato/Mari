@@ -176,3 +176,54 @@ export const CoffeeIcon: React.FC<React.SVGProps<SVGSVGElement>> = (props) => (
         <path strokeLinecap="round" strokeLinejoin="round" d="M15 9.75h6.75a.75.75 0 01.75.75v6a.75.75 0 01-.75.75H15" />
     </svg>
 );
+
+export const LadybugIcon: React.FC<React.SVGProps<SVGSVGElement>> = (props) => (
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" {...props}>
+        <g transform="translate(0, -1)">
+            {/* Left Wing - Lighter Blue */}
+            <path d="M10.8 6 C 4.8 4.8, 2.4 12, 7.2 16.8 L 12 19.2 Z" fill="#60a5fa" />
+            
+            {/* Right Wing - Darker Blue */}
+            <path d="M13.2 6 C 19.2 4.8, 21.6 12, 16.8 16.8 L 12 19.2 Z" fill="#3b82f6" />
+            
+            {/* Body - Yellow */}
+            <path d="M12 4.8 C 8.4 4.8, 6 9.6, 6 14.4 C 6 20.4, 12 22.8, 12 22.8 C 12 22.8, 18 20.4, 18 14.4 C 18 9.6, 15.6 4.8, 12 4.8 Z" fill="#facc15" />
+            
+            {/* Head */}
+            <path d="M12 4.8 C 9.6 4.8, 8.4 7.2, 8.4 8.4 L 15.6 8.4 C 15.6 7.2, 14.4 4.8, 12 4.8 Z" fill="#1c1917" />
+            
+            {/* Center Line */}
+            <line x1="12" y1="8.4" x2="12" y2="21.6" stroke="#1c1917" strokeWidth="0.72" />
+            
+            {/* Spots */}
+            <circle cx="9.6" cy="12" r="1.2" fill="#1c1917" />
+            <circle cx="14.4" cy="12" r="1.2" fill="#1c1917" />
+            <circle cx="10.08" cy="16.8" r="1.44" fill="#1c1917" />
+            <circle cx="13.92" cy="16.8" r="1.44" fill="#1c1917" />
+            
+            {/* Antennae */}
+            <path d="M9.6 7.2 C 7.2 3.6, 9.6 2.4, 10.8 3.6" stroke="#1c1917" strokeWidth="0.6" fill="none" strokeLinecap="round" />
+            <path d="M14.4 7.2 C 16.8 3.6, 14.4 2.4, 13.2 3.6" stroke="#1c1917" strokeWidth="0.6" fill="none" strokeLinecap="round" />
+        </g>
+    </svg>
+);
+
+
+export const BorderIcon: React.FC<React.SVGProps<SVGSVGElement>> = (props) => (
+    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" {...props}>
+        <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 3.75v4.5m0-4.5h4.5m-4.5 0L9 9M3.75 20.25v-4.5m0 4.5h4.5m-4.5 0L9 15M20.25 3.75h-4.5m4.5 0v4.5m0-4.5L15 9m5.25 11.25h-4.5m4.5 0v-4.5m0 4.5L15 15" />
+    </svg>
+);
+
+export const ColorPaletteIcon: React.FC<React.SVGProps<SVGSVGElement>> = (props) => (
+    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" {...props}>
+        <path strokeLinecap="round" strokeLinejoin="round" d="M9.53 16.122a3 3 0 00-5.78 1.128 2.25 2.25 0 01-2.4 2.245 4.5 4.5 0 008.4-2.245c0-.399-.078-.78-.22-1.128zm0 0a15.998 15.998 0 003.388-1.62m-5.043-.025a15.998 15.998 0 011.622-3.385m5.043.025a15.998 15.998 0 001.622-3.385m3.388 1.62a15.998 15.998 0 00-1.622-3.385m0 5.043a15.998 15.998 0 01-3.388-1.622m-5.043-.025a15.998 15.998 0 00-3.385-1.622m0 5.043a15.998 15.998 0 01-1.622 3.385m3.388 1.622a15.998 15.998 0 011.622 3.385m0-5.043a15.998 15.998 0 003.385 1.622m-5.043.025a15.998 15.998 0 013.385 1.622m0 0a2.25 2.25 0 103.89-1.654 2.25 2.25 0 00-3.89 1.654z" />
+    </svg>
+);
+
+export const SpacingIcon: React.FC<React.SVGProps<SVGSVGElement>> = (props) => (
+    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" {...props}>
+        <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 9h16.5m-16.5 6.75h16.5" />
+        <path strokeLinecap="round" strokeLinejoin="round" d="M12 3v18" />
+    </svg>
+);

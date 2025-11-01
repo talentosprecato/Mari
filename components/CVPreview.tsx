@@ -2,7 +2,8 @@ import React, { useEffect, useState, useRef } from 'react';
 import { TemplateSelector } from './TemplateSelector';
 import { FontSelector } from './FontSelector';
 import { DownloadIcon, SparklesIcon, XCircleIcon } from './icons';
-import { PortfolioItem } from '../types';
+import { PortfolioItem, SectionStyles, SectionStyle, StylableSection } from '../types';
+import { SectionStyler } from './SectionStyler';
 
 // This is a global function from the 'marked' library loaded in index.html
 declare global {
@@ -34,6 +35,8 @@ interface CVPreviewProps {
   portfolio: PortfolioItem[];
   fontPair: string;
   onFontPairChange: (id: string) => void;
+  sectionStyles: SectionStyles;
+  onSectionStyleChange: (sectionId: StylableSection, field: keyof SectionStyle, value: string) => void;
 }
 
 interface Option<T extends string> {
@@ -47,6 +50,56 @@ interface OptionSelectorProps<T extends string> {
     selectedOption: T;
     onChange: (option: T) => void;
 }
+
+const processHtmlForStyling = (html: string): string => {
+    const parts = html.split(/<!--\s*section:(\w+)\s*-->/);
+    if (parts.length <= 1) return html;
+
+    let result = parts[0]; 
+    for (let i = 1; i < parts.length; i += 2) {
+        const sectionId = parts[i];
+        const content = parts[i + 1];
+        result += `<div class="cv-section cv-section-${sectionId}">${content}</div>`;
+    }
+    return result;
+};
+
+const generateSectionStylesCSS = (styles: SectionStyles): string => {
+    const cssParts = Object.entries(styles).map(([sectionId, style]) => {
+        const rules = [];
+        
+        // Background & Padding
+        if (style.backgroundColor !== 'transparent') {
+            rules.push(`background-color: ${style.backgroundColor};`);
+            if(style.border !== 'full') {
+                 rules.push(`padding: 1em; border-radius: 0.5rem;`);
+            }
+        }
+
+        // Spacing (Margin)
+        const spacingMap = { small: '0.75em', medium: '1.5em', large: '2.5em' };
+        rules.push(`margin-top: ${spacingMap[style.spacing]};`);
+        rules.push(`margin-bottom: ${spacingMap[style.spacing]};`);
+        
+        // Border
+        if (style.border !== 'none') {
+            const borderStyle = '1px solid var(--cv-border-color)';
+            if (style.border === 'top') rules.push(`border-top: ${borderStyle}; padding-top: 1em;`);
+            if (style.border === 'bottom') rules.push(`border-bottom: ${borderStyle}; padding-bottom: 1em;`);
+            if (style.border === 'full') {
+                rules.push(`border: ${borderStyle};`);
+                rules.push(`padding: 1em; border-radius: 0.5rem;`);
+            }
+        }
+
+        return `.cv-section-${sectionId} { ${rules.join(' ')} }`;
+    });
+    return cssParts.join('\n');
+};
+
+const DynamicStyles: React.FC<{ css: string }> = ({ css }) => {
+    return <style>{css}</style>;
+};
 
 const OptionSelector = <T extends string>({ label, options, selectedOption, onChange }: OptionSelectorProps<T>) => {
     return (
@@ -158,6 +211,13 @@ const CVPreviewStyles = () => (
             font-family: var(--cv-font-sans);
             font-size: var(--cv-font-size);
             line-height: var(--cv-line-height);
+        }
+        
+        .cv-section > *:first-child {
+            margin-top: 0 !important;
+        }
+        .cv-section > *:last-child {
+            margin-bottom: 0 !important;
         }
 
         .cv-preview-content h1 {
@@ -523,7 +583,8 @@ export const CVPreview: React.FC<CVPreviewProps> = ({
     photoSize, onPhotoSizeChange,
     videoAlignment, onVideoAlignmentChange,
     videoSize, onVideoSizeChange,
-    portfolio, fontPair, onFontPairChange 
+    portfolio, fontPair, onFontPairChange,
+    sectionStyles, onSectionStyleChange
 }) => {
   const [htmlContent, setHtmlContent] = useState('');
   const [isExporting, setIsExporting] = useState<false | 'pdf'>(false);
@@ -533,7 +594,8 @@ export const CVPreview: React.FC<CVPreviewProps> = ({
   useEffect(() => {
     if (markdownContent) {
       const parsedHtml = window.marked.parse(markdownContent);
-      setHtmlContent(parsedHtml);
+      const styledHtml = processHtmlForStyling(parsedHtml);
+      setHtmlContent(styledHtml);
     } else {
       setHtmlContent('');
     }
@@ -643,6 +705,7 @@ export const CVPreview: React.FC<CVPreviewProps> = ({
   return (
     <div className="bg-white/80 backdrop-blur-sm p-6 sm:p-8 rounded-lg shadow-lg sticky top-24 border border-stone-200/50">
         <CVPreviewStyles />
+        <DynamicStyles css={generateSectionStylesCSS(sectionStyles)} />
         <div className="flex flex-wrap justify-between items-center mb-6 border-b border-stone-200 pb-3 gap-4">
             <h2 className="text-2xl font-bold text-stone-900">CV Preview</h2>
             <div className='w-full'>
@@ -685,7 +748,7 @@ export const CVPreview: React.FC<CVPreviewProps> = ({
           </div>
         )}
 
-        <div className='grid grid-cols-1 md:grid-cols-2 gap-x-8'>
+        <div className='grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-6'>
             <TemplateSelector 
                 selectedTemplate={selectedTemplate}
                 onTemplateChange={onTemplateChange}
@@ -739,7 +802,12 @@ export const CVPreview: React.FC<CVPreviewProps> = ({
             </div>
         </div>
         
-        <div className={`template-${selectedTemplate} font-pair-${fontPair} photo-size-${photoSize}`}>
+        <SectionStyler 
+            styles={sectionStyles}
+            onChange={onSectionStyleChange}
+        />
+
+        <div className={`template-${selectedTemplate} font-pair-${fontPair} photo-size-${photoSize} mt-6`}>
             <div className="min-h-[600px] border border-stone-200 rounded-lg p-4 bg-white shadow-inner">
                 {renderContent()}
             </div>

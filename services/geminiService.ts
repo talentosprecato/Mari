@@ -1,5 +1,3 @@
-
-
 import { GoogleGenAI, Type, LiveServerMessage, Modality } from "@google/genai";
 import { CVData, CVDataFromAI, SectionId, JobSuggestion } from "../types";
 
@@ -28,7 +26,7 @@ const templatePrompts: Record<string, string> = {
     > A brief professional summary or the professional narrative here.
     | | |
     |---|---|
-    | ## Experience ... | ### Contact ... <br> ## Skills ... <br> ## Certifications ... |
+    | <!-- section:experience --> ## Experience ... | <!-- section:personal --> ### Contact ... <br> <!-- section:skills --> ## Skills ... <br> <!-- section:certifications --> ## Certifications ... |
 - **Style:** Professional and clean. Use headings within the table cells to delineate sections. The overall tone should be modern and efficient.`,
   'two-column-creative': `
 - **Layout:** Use a two-column Markdown table.
@@ -40,7 +38,7 @@ const templatePrompts: Record<string, string> = {
 - **Example:**
     | | |
     |---|---|
-    | ### Contact ... <br> ## Skills ... <br> ## Certifications ... | # Jane Doe <br> > Creative Bio... <br><br> ## Experience ... |`,
+    | <!-- section:personal --> ### Contact ... <br> <!-- section:skills --> ## Skills ... <br> <!-- section:certifications --> ## Certifications ... | # Jane Doe <br> > Creative Bio... <br><br> <!-- section:experience --> ## Experience ... |`,
   creative: `
 - **Layout:** Get creative with Markdown. You could suggest a two-column feel by using tables or other structures if it looks clean.
 - **Summary:** Instead of a formal summary, create a short, engaging "About Me" section (2-3 sentences).
@@ -90,8 +88,12 @@ const languageConfig: Record<string, { name: string; narrativeHeading: string; g
     pt: { name: 'Português', narrativeHeading: 'O que fez de você o profissional que é hoje', gdprConsent: 'Autorizo o tratamento dos meus dados pessoais contidos neste currículo vitae nos termos do Regulamento da UE 2016/679 (RGPD), exclusivamente para fins de seleção de pessoal.' },
     ru: { name: 'Русский', narrativeHeading: 'Что сделало вас тем профессионалом, которым вы являетесь сегодня', gdprConsent: 'Я даю согласие на обработку моих персональных данных, содержащихся в этом резюме, в соответствии с Регламентом ЕС 2016/679 (GDPR) исключительно в целях отбора персонала.' },
     ar: { name: 'العربية', narrativeHeading: 'ما الذي جعلك المحترف الذي أنت عليه اليوم', gdprConsent: 'أوافق على معالجة بياناتي الشخصية الواردة في هذه السيرة الذاتية وفقًا للائحة الاتحاد الأوروبي 2016/679 (GDPR)، وذلك لغرض اختيار الموظفين فقط.' },
+    tr: { name: 'Türkçe', narrativeHeading: 'Sizi bugünkü profesyonel yapan nedir', gdprConsent: 'Bu CV\'de yer alan kişisel verilerimin, yalnızca personel seçimi amacıyla AB Yönetmeliği 2016/679\'a (GDPR) uygun olarak işlenmesine izin veriyorum.' },
+    az: { name: 'Azərbaycanca', narrativeHeading: 'Sizi bugünkü peşəkar edən nədir', gdprConsent: 'Bu CV-də olan şəxsi məlumatlarımın, yalnız kadr seçimi məqsədləri üçün AB Qaydası 2016/679 (GDPR) uyğun olaraq işlənməsinə icazə verirəm.' },
     'it-sal': { name: 'dialetto Salentino (Lecce)', narrativeHeading: 'Ce t\'ha fattu lu professionista ca si moi', gdprConsent: 'Tau lu cunsensu al trattamentu te li dati mei personali scritti \'ntra stu curriculum vitae comu dice lu Regolamentu UE 2016/679 (GDPR), sulu pe la selezione te lu personale.' },
     'it-sic': { name: 'dialetto Siciliano', narrativeHeading: 'Cosa t\'ha fattu addivintari u prufissiunista ca si oggi', gdprConsent: 'Dugnu u cunsensu pû trattamentu di li me dati pirsunali ca su scritti \'nta stu curriculum vitae secunnu u Regolamentu UE 2016/679 (GDPR), sulu pi scopi di silizzioni di pirsunali.' },
+    'it-par': { name: 'dialetto Parmigiano', narrativeHeading: 'Csa t\'ha fat dvintär al professionesta che t\'si adesa', gdprConsent: 'A dagh al me consèns al trattament di me dat personäl contenù in \'stò curriculum vitae second al Regolament UE 2016/679 (GDPR), solament par la selesjón dal personäl.' },
+    'it-abr': { name: 'dialetto Abruzzese', narrativeHeading: 'Che t\'ha fatte addevendà lu professioniste che si mo\'', gdprConsent: 'Doche lu consense a lu trattamende de li date personal meje che šta \'nghe stu curriculum vitae seconde a lu Regolamende UE 2016/679 (GDPR), sulamende pe la selezione de lu personale.' },
 };
 
 
@@ -115,6 +117,10 @@ const buildPrompt = (data: CVData, templateId: string, sectionOrder: SectionId[]
       languageInstruction = `Generate the entire CV in the **Salentino dialect from the Lecce region of Italy**. While using the dialect, ensure the structure and headings are professional and understandable, perhaps using standard Italian for main headings if the dialect form is not common (e.g., "Esperienza"). All content must be in this dialect.`;
   } else if (language === 'it-sic') {
       languageInstruction = `Generate the entire CV in the **Sicilian dialect of Italy**. While using the dialect, ensure the structure and headings are professional and understandable, perhaps using standard Italian for main headings if the dialect form is not common (e.g., "Esperienza"). All content must be in this dialect.`;
+  } else if (language === 'it-par') {
+      languageInstruction = `Generate the entire CV in the **Parmigiano dialect of Italy**. While using the dialect, ensure the structure and headings are professional and understandable, perhaps using standard Italian for main headings if the dialect form is not common (e.g., "Esperienza"). All content must be in this dialect.`;
+  } else if (language === 'it-abr') {
+      languageInstruction = `Generate the entire CV in the **Abruzzese dialect of Italy**. While using the dialect, ensure the structure and headings are professional and understandable, perhaps using standard Italian for main headings if the dialect form is not common (e.g., "Esperienza"). All content must be in this dialect.`;
   }
   
   let photoInstruction = '';
@@ -141,7 +147,7 @@ ${table}
   let signatureInstruction = '';
   const SIGNATURE_PLACEHOLDER = '--CV-SIGNATURE-PLACEHOLDER--';
   if (data.signature) {
-      signatureInstruction = `8.  **Signature:** At the very end of the CV, after all other content, create a new section with the heading \`## Signature\`. Below this heading, you MUST place the user's signature using this exact markdown: \`![Signature](${SIGNATURE_PLACEHOLDER})\``;
+      signatureInstruction = `**Signature:** At the very end of the CV, after all other content, create a new section with the heading \`## Signature\`. Below this heading, you MUST place the user's signature using this exact markdown: \`![Signature](${SIGNATURE_PLACEHOLDER})\``;
   }
 
   // Create a copy of the data without image data to avoid exceeding token limits in the JSON part of the prompt.
@@ -159,23 +165,39 @@ ${table}
 You are an expert career coach and professional resume writer. Your task is to transform the following JSON data into a compelling, professional, and well-formatted Curriculum Vitae (CV) in Markdown format.
 
 **Instructions:**
+
 1.  **Language**: ${languageInstruction}
+
 ${photoInstruction}
-2.  **Generate sections in this specific order:** ${capitalizedSectionNames.join(', ')}. This is a critical instruction.
-3.  **Adhere to the selected template style:**
+
+2.  **Section Markers (CRITICAL):** Before each major section heading (like \`## Experience\`), you MUST insert a special HTML comment to identify the section, like \`<!-- section:experience -->\`. Use the following keys: \`personal\`, \`experience\`, \`education\`, \`skills\`, \`projects\`, \`certifications\`, \`professionalNarrative\`. This is crucial for styling and must be included.
+    *   Example for Experience section: \`<!-- section:experience -->\n## Experience\`
+    *   Example for Skills section: \`<!-- section:skills -->\n## Skills\`
+
+3.  **Generate sections in this specific order:** ${capitalizedSectionNames.join(', ')}. This is a critical instruction.
+
+4.  **Adhere to the selected template style:**
     ${templateInstructions}
-4.  **Experience Section:** For each job, rewrite the responsibilities into 3-5 action-oriented bullet points. Start each point with a strong verb (e.g., "Engineered", "Managed", "Accelerated"). Quantify achievements with metrics wherever possible (e.g., "Increased user engagement by 15%").
-5.  **Personal Details:** In the contact information area, include all provided links (LinkedIn, Website, GitHub, Twitter, and the list in 'socialLinks'). Format them cleanly. For the 'socialLinks' array, create a single line of pipe-separated links, like: [Facebook](url) | [Instagram](url).
-6.  **Professional Narrative Section:** If the 'professionalNarrative' field exists and is not empty, create a section with the heading "## ${narrativeHeading}" and place the user's text below it.
-7.  **General Formatting:** Use standard Markdown for the entire output.
+
+5.  **Experience Section:** For each job, rewrite the responsibilities into 3-5 action-oriented bullet points. Start each point with a strong verb (e.g., "Engineered", "Managed", "Accelerated"). Quantify achievements with metrics wherever possible (e.g., "Increased user engagement by 15%").
+
+6.  **Personal Details:** In the contact information area, include all provided links (LinkedIn, Website, GitHub, Twitter, and the list in 'socialLinks'). Format them cleanly. For the 'socialLinks' array, create a single line of pipe-separated links, like: [Facebook](url) | [Instagram](url).
+
+7.  **Professional Narrative Section:** If the 'professionalNarrative' field exists and is not empty, create a section with the heading "## ${narrativeHeading}" and place the user's text below it. Remember to include its section marker: \`<!-- section:professionalNarrative -->\`.
+
+8.  **General Formatting:** Use standard Markdown for the entire output.
     *   Use a main heading (#) for the person's name (unless a photo is included, then follow the photo instructions).
     *   Use level two headings (##) for sections.
     *   Use bold for job titles and company names.
     *   Use italics for dates and locations.
-8.  **Tone:** Maintain a professional, confident, and polished tone throughout, matching the chosen template style and language.
-${signatureInstruction || '9. **Signature:** No signature provided.'}
-10.  **Privacy Consent:** At the very bottom of the document, after everything else (including the signature), you MUST add the following privacy consent statement. Format it in small, italic text: *${gdprConsentText}*
-11. **Output:** Only output the Markdown for the CV. Do not include any other commentary, introductory text, or the JSON data itself.
+
+9. **Tone:** Maintain a professional, confident, and polished tone throughout, matching the chosen template style and language.
+
+10. ${signatureInstruction || '**Signature:** No signature provided.'}
+
+11. **Privacy Consent:** At the very bottom of the document, after everything else (including the signature), you MUST add the following privacy consent statement. Format it in small, italic text: *${gdprConsentText}*
+
+12. **Output:** Only output the Markdown for the CV. Do not include any other commentary, introductory text, or the JSON data itself.
 
 **User Data:**
 \`\`\`json
@@ -446,6 +468,10 @@ export const parseAndEnhanceCVFromFile = async (file: File, language: string): P
         languageInstructionForParse = `**Crucially, translate and write all output text (job titles, responsibilities, descriptions, etc.) into the Salentino dialect (Lecce). The final JSON object should contain only text in this dialect.**`;
     } else if (language === 'it-sic') {
         languageInstructionForParse = `**Crucially, translate and write all output text (job titles, responsibilities, descriptions, etc.) into the Sicilian dialect. The final JSON object should contain only text in this dialect.**`;
+    } else if (language === 'it-par') {
+        languageInstructionForParse = `**Crucially, translate and write all output text (job titles, responsibilities, descriptions, etc.) into the Parmigiano dialect. The final JSON object should contain only text in this dialect.**`;
+    } else if (language === 'it-abr') {
+        languageInstructionForParse = `**Crucially, translate and write all output text (job titles, responsibilities, descriptions, etc.) into the Abruzzese dialect. The final JSON object should contain only text in this dialect.**`;
     }
 
     const prompt = `
